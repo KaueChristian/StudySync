@@ -1,61 +1,88 @@
-from src.agenda import Agenda
-from src.database import Database
-import sqlite3 as sq
-import datetime as dt
+# main.py
 
-
-agenda = Agenda()
-
-def check_table_exists():
-    return agenda.check_table_exists()
+from src.db.funcoes import Agenda
 
 def display_menu():
-    
     print('''
-        1. Create agenda
-        2. Delete agenda
-        3. Add a task
-        4. List all tasks
-        5. Remove a task
-        6. Remove all tasks
-        0. Exit
+        ======== Agenda ========
+        1. Adicionar Tarefa
+        2. Listar Todas as Tarefas
+        3. Remover Tarefa
+        4. Atualizar Tarefa
+        5. Remover Todas as Tarefas
+        6. Remover Agenda
+        0. Sair
+        =========================
     ''')
 
-def menu(option):
+def menu(option, agenda):
     match option:
         case 1:
-            agenda.create_tb()
+            discipline = input('Disciplina: ').strip()
+            subject = input('Assunto: ').strip()
+            date_time = input('Data (DD-MM-YYYY): ').strip()
+            tier_input = input('Prioridade (1-5): ').strip()
+            if not tier_input.isdigit():
+                print('Prioridade inválida. Deve ser um número entre 1 e 5.')
+                return
+            tier = int(tier_input)
+            agenda.add_task(discipline, subject, date_time, tier)
+        
         case 2:
-            agenda.remove_tb()
+            agenda.list_tasks()
+        
         case 3:
-            if agenda.check_table_exists():
-                discipline = input('Discipline: ')
-                subject = input('Subject: ')
-                date_time = (input('Date and time (YYYY-MM-DD): '))
-                tier = input('Tier/Prioriry: ')
-                agenda.add_task(discipline, subject, date_time, tier)
-            else:
-                print("You don't have any agenda. Please create one.")
-        case 4:
-            agenda.list_task()
-        case 5:
-            id = input('Insert the id of a task: ')
+            id_input = input('Insira o ID da tarefa a ser removida: ').strip()
+            if not id_input.isdigit():
+                print('ID inválido. Deve ser um número.')
+                return
+            id = int(id_input)
             agenda.remove_task(id)
+        
+        case 4:
+            id_input = input('ID da tarefa a ser atualizada: ').strip()
+            if not id_input.isdigit():
+                print('ID inválido. Deve ser um número.')
+                return
+            id = int(id_input)
+            discipline = input('Nova Disciplina (deixe em branco para não alterar): ').strip()
+            subject = input('Novo Assunto (deixe em branco para não alterar): ').strip()
+            date_time = input('Nova Data (DD-MM-YYYY, deixe em branco para não alterar): ').strip()
+            tier_input = input('Nova Prioridade (1-5, deixe em branco para não alterar): ').strip()
+            tier = int(tier_input) if tier_input.isdigit() else None
+            agenda.update_task(id, discipline or None, subject or None, date_time or None, tier)
+        
+        case 5:
+            confirm = input('Tem certeza que deseja remover todas as tarefas? (s/n): ').strip().lower()
+            if confirm == 's':
+                agenda.clear_all_tasks()
+            else:
+                print('Operação cancelada.')
+        
         case 6:
-            agenda.clear_all_tasks()
+            confirm = input('Tem certeza que deseja remover a agenda (todas as tarefas)? (s/n): ').strip().lower()
+            if confirm == 's':
+                agenda.remove_table()
+            else:
+                print('Operação cancelada.')
+        
         case 0:
-            print('Exiting...')
+            print('Saindo...')
             exit()
+        
         case _:
-            print('Invalid option! Try again')
+            print('Opção inválida! Tente novamente.')
 
-if __name__ == "__main__":
+def main():
+    agenda = Agenda()
+    
     while True:
         display_menu()
         try:
-            option = int(input('Option: '))
-            menu(option)
+            option = int(input('Opção: ').strip())
+            menu(option, agenda)
         except ValueError:
-            print('Invalid input. Please enter with a number option')
-    
+            print('Entrada inválida. Por favor, insira um número válido.')
 
+if __name__ == "__main__":
+    main()

@@ -14,7 +14,7 @@ prompt = f"Gemini, quero que vc me passe um link da materia {materia} com o tóp
 
 # Loop de interação com o usuário 
 while True:
-    texto = prompt
+    texto =  input("Digite uma mensagem: ")
 
     if texto == "sair":
         break
