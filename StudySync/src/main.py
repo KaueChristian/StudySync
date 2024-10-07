@@ -1,5 +1,3 @@
-# main.py
-
 from src.db.funcoes import Agenda
 
 def display_menu():
