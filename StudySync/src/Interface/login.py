@@ -11,7 +11,7 @@ def main(page: ft.Page):
             size=50,
             weight ='bold'
         ),
-        margin = ft.margin.only(left=140)
+        
     )
     
     login_input = ft.Container(
@@ -20,7 +20,7 @@ def main(page: ft.Page):
             width = 300,
             border_color = 'white'
         ),
-        margin= ft.margin.only(left=50)
+        
     )
     
     senha_input = ft.Container(
@@ -31,7 +31,7 @@ def main(page: ft.Page):
             width = 300,
             border_color = 'white'
         ),
-        margin= ft.margin.only(left=50)
+        
     )
     
     btn = ft.Container(
@@ -40,36 +40,38 @@ def main(page: ft.Page):
             width = 200,
             height = 50,
             style = ft.ButtonStyle(
+                color = 'white',
+                
                 text_style = ft.TextStyle (
-                    size = 30,
-                    color = 'white'
+                    size = 25
                 ),
                 bgcolor = {
                     ft.MaterialState.DEFAULT: ft.colors.BLACK26,
-                    ft.MaterialState.HOVERED: ft.colors.BLACK45
+                    ft.MaterialState.HOVERED: ft.colors.BLACK45,
                 },
             ),
         ),
-        margin = ft.margin.only(left = 100)
+       
     )
     
     layout = ft.Container(
-        width = 400,
+        width = 600,
         height = 400,
         border_radius = 20,
         shadow = ft.BoxShadow(
             blur_radius = 5,
-            color = 'black'
+            color = '#363636'
         ),
         gradient = ft.LinearGradient(
             begin = ft.alignment.top_left,
             end = ft.alignment.bottom_right,
-            colors = [ft.colors.BLACK87,
-                      ft.colors.GREY_400,
-                      ft.colors.BLACK87],
+            colors=['#222222', 
+                    '#444444',  
+                    '#222222'],
             stops = [0, 0.5, 1]
         ),
         content = ft.Column(
+            horizontal_alignment = 'center',
             spacing = 30,
             alignment = 'center',
             controls = [
@@ -83,5 +85,5 @@ def main(page: ft.Page):
     
     page.add(layout)
 
-    
+     
 ft.app(target = main)
