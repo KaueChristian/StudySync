@@ -35,6 +35,7 @@ class Agenda:
             conn.commit()
 
     def add_user(self, nome: str, email: str):
+        
         try:
             with self.db.connect() as conn:
                 cursor = conn.cursor()
@@ -42,16 +43,19 @@ class Agenda:
                     INSERT INTO usuarios (nome, email) VALUES (?, ?)
                 ''', (nome, email))
                 conn.commit()
+                user_id = cursor.lastrowid
                 print('Usuário adicionado com sucesso!')
+                return user_id
         except sq.IntegrityError as e:
             print(f"Erro de integridade de dados: {e}")
         except sq.DatabaseError as e:
             print(f"Erro no banco de dados: {e}")
+        return None
             
     def login_user(self, email: str):
         with self.db.connect() as conn:
             cursor = conn.cursor()
-            cursor.execute('SELECT id FROM usuarios WHERE = ?', (email))
+            cursor.execute('SELECT id FROM usuarios WHERE email = ?', (email,))
             user = cursor.fetchone()
             
         if user:
@@ -59,7 +63,7 @@ class Agenda:
         else:
             return None
 
-    def add_task(self, usuario_id: int, discipline: str, subject: str, date_time: str):
+    def add_task(self, discipline: str, subject: str, date_time: str,usuario_id: int):
         if not self.check_table_exists('tarefas'):
             print("A tabela 'tarefas' não existe. Por favor, crie uma agenda primeiro.")
             return
@@ -143,7 +147,7 @@ class Agenda:
                 id, usuario_id, discipline, subject, date_time = task
                 print(f"ID: {id} | Disciplina: {discipline} | Assunto: {subject} | Data: {date_time}")
 
-    def remove_table(self):
+    def remove_table(self, usuario_id):
         if not self.check_table_exists('tarefas'):
             print("Você não possui nenhuma agenda para deletar! Por favor, crie uma.")
             return
@@ -151,7 +155,7 @@ class Agenda:
         try:
             with self.db.connect() as conn:
                 cursor = conn.cursor()
-                cursor.execute('DROP TABLE tarefas')
+                cursor.execute('DELETE FROM tarefas WHERE usuario_id = ?', (usuario_id,))
                 conn.commit()
                 print('A agenda foi deletada com sucesso!')
         except sq.DatabaseError as e:

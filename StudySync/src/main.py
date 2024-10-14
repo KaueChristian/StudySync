@@ -2,7 +2,7 @@ from src.db.funcoes import Agenda
 
 def display_user_menu():
     print('''
-        ======== Bem-vindo ========
+        ======== Bem-vindo =========
         1. Registrar Usuário
         2. Login
         0. Sair
@@ -11,7 +11,7 @@ def display_user_menu():
 
 def display_task_menu():
     print('''
-        ======== Agenda ========
+        ======== Agenda =========
         1. Adicionar Tarefa
         2. Listar Todas as Tarefas
         3. Remover Tarefa
@@ -28,7 +28,7 @@ def user_menu(option, agenda):
             name = input('Nome: ').strip()
             email = input('Email: ').strip()
             user_id = agenda.add_user(name, email)
-            if user_id:
+            if user_id: 
                 print(f'Usuário {name} registrado com sucesso!')
             return user_id
         
