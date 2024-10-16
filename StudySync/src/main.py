@@ -1,4 +1,4 @@
-from src.db.funcoes import Agenda
+from db.funcoes import Agenda
 
 def display_user_menu():
     print('''
@@ -48,7 +48,8 @@ def user_menu(option, agenda):
         case _:
             print('Opção inválida! Tente novamente.')
             return None
-
+        
+        
 def task_menu(option, agenda, user_id):
     match option:
         case 1:
@@ -77,7 +78,7 @@ def task_menu(option, agenda, user_id):
             discipline = input('Nova Disciplina (deixe em branco para não alterar): ').strip()
             subject = input('Novo Assunto (deixe em branco para não alterar): ').strip()
             date_time = input('Nova Data (DD-MM-YYYY, deixe em branco para não alterar): ').strip()
-            agenda.update_task(id, discipline or None, subject or None, date_time or None, user_id)
+            agenda.update_task(id, user_id, discipline or None, subject or None, date_time)
         
         case 5:
             confirm = input('Tem certeza que deseja remover todas as tarefas? (s/n): ').strip().lower()

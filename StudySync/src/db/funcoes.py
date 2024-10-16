@@ -1,6 +1,6 @@
 import sqlite3 as sq
 import datetime as dt
-from src.db.database import Database
+from db.database import Database
 
 class Agenda:
     def __init__(self):
@@ -63,11 +63,25 @@ class Agenda:
         else:
             return None
 
-    def add_task(self, discipline: str, subject: str, date_time: str,usuario_id: int):
+    def verificar_data(self, date_str: str) -> bool:
+        try:
+            input_date = dt.datetime.strptime(date_str, '%d-%m-%Y')
+            today = dt.datetime.today()
+            return input_date > today
+        except ValueError:
+            print("Error: Tipo de data inválido.")
+            return False
+        
+    def add_task(self, discipline: str, subject: str, date_time: str, usuario_id: int):
+        
         if not self.check_table_exists('tarefas'):
             print("A tabela 'tarefas' não existe. Por favor, crie uma agenda primeiro.")
             return
 
+        if not self.verificar_data(date_time):
+            print("Erro: A data deve ser superior a data atual.")
+            return
+        
         try:
             parsed_date = dt.datetime.strptime(date_time, '%d-%m-%Y')
             date_time_formatted = parsed_date.strftime('%Y-%m-%d %H:%M:%S')
@@ -89,15 +103,14 @@ class Agenda:
         except sq.DatabaseError as e:
             print(f"Erro no banco de dados: {e}")
 
-    def remove_task(self, id: int):
+    def remove_task(self, id: int, id_usuario):
         if not self.check_table_exists('tarefas'):
             print("A tabela 'tarefas' não existe. Por favor, crie uma agenda primeiro.")
             return
-
         try:
             with self.db.connect() as conn:
                 cursor = conn.cursor()
-                cursor.execute('DELETE FROM tarefas WHERE id = ?', (id,))
+                cursor.execute('DELETE FROM tarefas WHERE id = ? AND usuario_id = ?', (id, id_usuario))
                 if cursor.rowcount == 0:
                     print(f"Nenhuma tarefa encontrada com o ID {id}.")
                 else:
@@ -107,14 +120,14 @@ class Agenda:
             print(f"Ocorreu um erro: {e}")
             print("Verifique se a tarefa selecionada existe.")
 
-    def clear_all_tasks(self):
+    def clear_all_tasks(self, usuario_id):
         if not self.check_table_exists('tarefas'):
             print("A tabela 'tarefas' não existe. Por favor, crie uma agenda primeiro.")
             return
         
         with self.db.connect() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM tarefas")
+            cursor.execute("SELECT COUNT(*) FROM tarefas WHERE usuario_id = ?", (usuario_id,))
             task_count = cursor.fetchone()[0]
 
             if task_count == 0:
@@ -167,9 +180,13 @@ class Agenda:
             cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
             return cursor.fetchone() is not None
 
-    def update_task(self, id: int, discipline: str = None, subject: str = None, date_time: str = None):
+    def update_task(self, id: int, usuario_id: int, discipline: str = None, subject: str = None, date_time: str = None):
         if not self.check_table_exists('tarefas'):
             print("A tabela 'tarefas' não existe. Por favor, crie uma agenda primeiro.")
+            return
+        
+        if not usuario_id:
+            print("O usuario deve ser especificado.")
             return
 
         fields = {}
@@ -190,13 +207,13 @@ class Agenda:
             return
 
         set_clause = ', '.join([f"{key} = ?" for key in fields.keys()])
-        values = list(fields.values())
-        values.append(id)
+        valores = list(fields.values())
+        valores.extend([id, usuario_id])
 
         try:
             with self.db.connect() as conn:
                 cursor = conn.cursor()
-                cursor.execute(f'UPDATE tarefas SET {set_clause} WHERE id = ?', values)
+                cursor.execute(f'UPDATE tarefas SET {set_clause} WHERE id = ? AND usuario_id = ?', valores)
                 if cursor.rowcount == 0:
                     print(f"Nenhuma tarefa encontrada com o ID {id}.")
                 else:
