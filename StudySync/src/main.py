@@ -1,4 +1,4 @@
-from db.funcoes import Agenda
+from src.db.funcoes import Agenda
 
 def display_user_menu():
     print('''

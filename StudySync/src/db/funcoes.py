@@ -1,6 +1,6 @@
 import sqlite3 as sq
 import datetime as dt
-from db.database import Database
+from src.db.database import Database
 
 class Agenda:
     def __init__(self):
