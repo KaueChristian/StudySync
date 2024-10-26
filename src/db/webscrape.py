@@ -37,15 +37,3 @@ class WebScrape:
             time.sleep(1)  # Aguardar entre as requisições
 
         return results
-
-'''if __name__ == "__main__":
-    scraper = WebScrape()
-    tags = ["carros", "motos"]
-    results = scraper.web_scrape(tags)
-    print(results)
-
-    for tag, urls in results.items():
-        print(f"\nResultados para '{tag}':")
-        for url in urls:
-            print(f" - {url}")
-'''
