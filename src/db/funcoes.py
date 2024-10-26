@@ -1,6 +1,8 @@
 import sqlite3 as sq
 import datetime as dt
 from db.database import Database
+from bs4 import BeautifulSoup
+import requests
 
 class Agenda:
     def __init__(self):
@@ -221,3 +223,4 @@ class Agenda:
                     print("Tarefa atualizada com sucesso!")
         except sq.DatabaseError as e:
             print(f"Erro no banco de dados: {e}")
+

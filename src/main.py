@@ -1,25 +1,27 @@
 from db.funcoes import Agenda
+import db.webscrape as ws
 
 def display_user_menu():
-    print('''
-        ======== Bem-vindo =========
-        1. Registrar Usuário
-        2. Login
-        0. Sair
-        ============================
+    print(''' 
+        ======== Bem-vindo ========= 
+        1. Registrar Usuário 
+        2. Login 
+        0. Sair 
+        ============================ 
     ''')
 
 def display_task_menu():
-    print('''
-        ======== Agenda =========
-        1. Adicionar Tarefa
-        2. Listar Todas as Tarefas
-        3. Remover Tarefa
-        4. Atualizar Tarefa
-        5. Remover Todas as Tarefas
-        6. Remover Agenda
-        0. Sair
-        =========================
+    print(''' 
+        ======== Agenda ========= 
+        1. Adicionar Tarefa 
+        2. Listar Todas as Tarefas 
+        3. Remover Tarefa 
+        4. Atualizar Tarefa 
+        5. Remover Todas as Tarefas 
+        6. Remover Agenda 
+        7. Buscar por assunto na WEB (tags) 
+        0. Sair 
+        ========================= 
     ''')
 
 def user_menu(option, agenda):
@@ -48,7 +50,6 @@ def user_menu(option, agenda):
         case _:
             print('Opção inválida! Tente novamente.')
             return None
-        
         
 def task_menu(option, agenda, user_id):
     match option:
@@ -93,7 +94,24 @@ def task_menu(option, agenda, user_id):
                 agenda.remove_table(user_id)
             else:
                 print('Operação cancelada.')
-        
+
+        case 7:
+            search_tags = input('Digite as tags do assunto desejado (use vírgula para separar): ')
+            tags = [tag.strip() for tag in search_tags.split(',')]
+            scraper = ws.WebScrape()
+            result = scraper.web_scrape(tags)
+            if not result:
+                print("\nNenhum resultado encontrado.")
+            else:
+                for tag, links in result.items():
+                    print(f"\nTag: {tag}")
+                    if links:
+                        print("\nLinks encontrados:")
+                        for link in links:
+                            print(f" - {link}")
+                    else:
+                        print(f"\n Nenhum link encontrado para a tag: {tag}")
+
         case 0:
             print('Saindo...')
             exit()
