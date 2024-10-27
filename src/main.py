@@ -96,21 +96,31 @@ def task_menu(option, agenda, user_id):
                 print('Operação cancelada.')
 
         case 7:
-            search_tags = input('Digite as tags do assunto desejado (use vírgula para separar): ')
-            tags = [tag.strip() for tag in search_tags.split(',')]
-            scraper = ws.WebScrape()
-            result = scraper.web_scrape(tags)
+            tarefa_id_input = input('Digite o ID da tarefa desejada para buscar na web: ').strip()
+            
+            if not tarefa_id_input.isdigit():
+                print("ID inválido. Deve ser um número.")
+                return
+            
+            tarefa_id = int(tarefa_id_input)
+            
+            # Instancie o objeto WebScrape com a agenda atual
+            scraper = ws.WebScrape(agenda)
+            result = scraper.web_scrape(tarefa_id)
+            
+            max_result = 5
+            
             if not result:
                 print("\nNenhum resultado encontrado.")
             else:
                 for tag, links in result.items():
                     print(f"\nTag: {tag}")
                     if links:
-                        print("\nLinks encontrados:")
-                        for link in links:
+                        print("\nRetornando os 5 links mais relevantes:")
+                        for link in links[:max_result]:
                             print(f" - {link}")
                     else:
-                        print(f"\n Nenhum link encontrado para a tag: {tag}")
+                        print(f"\nNenhum link encontrado para a tag: {tag}")
 
         case 0:
             print('Saindo...')
