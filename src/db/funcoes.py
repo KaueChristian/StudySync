@@ -86,7 +86,7 @@ class Agenda:
             parsed_date = dt.datetime.strptime(date_time, '%d-%m-%Y')
             date_time_formatted = parsed_date.strftime('%Y-%m-%d %H:%M:%S')
         except ValueError:
-            print('Formato de data inválido. Use DD-MM-YYYY.')
+            print('Formato de data inválido. Use DD-MM-YYYY HH:MM:SS.')
             return
 
         try:
@@ -199,7 +199,7 @@ class Agenda:
                 parsed_date = dt.datetime.strptime(date_time, '%d-%m-%Y')
                 fields['data'] = parsed_date.strftime('%Y-%m-%d %H:%M:%S')
             except ValueError:
-                print('ERROR: Formato de data inválido. Use DD-MM-YYYY.')
+                print('ERROR: Formato de data inválido. Use DD-MM-YYYY HH:MM:SS.')
                 return
             
         if not fields:
