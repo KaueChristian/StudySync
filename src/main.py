@@ -29,14 +29,16 @@ def user_menu(option, agenda):
         case 1:
             name = input('Nome: ').strip()
             email = input('Email: ').strip()
-            user_id = agenda.add_user(name, email)
+            senha = str(input('Senha: ')).strip()
+            user_id = agenda.add_user(name, email, senha)
             if user_id: 
                 print(f'Usuário {name} registrado com sucesso!')
             return user_id
         
         case 2:
             email = input('Email: ').strip()
-            user_id = agenda.login_user(email)
+            senha = str(input('Senha: ')).strip()
+            user_id = agenda.login_user(email, senha)
             if user_id:
                 print('Login bem-sucedido!')
             else:

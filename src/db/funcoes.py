@@ -16,7 +16,8 @@ class Agenda:
                 CREATE TABLE IF NOT EXISTS usuarios(
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     nome TEXT NOT NULL,
-                    email TEXT NOT NULL UNIQUE
+                    email TEXT NOT NULL UNIQUE,
+                    senha TEXT
                 )
             ''')
             
@@ -34,14 +35,13 @@ class Agenda:
             
             conn.commit()
 
-    def add_user(self, nome: str, email: str):
-        
+    def add_user(self, nome: str, email: str, senha: str):
         try:
             with self.db.connect() as conn:
                 cursor = conn.cursor()
                 cursor.execute('''
-                    INSERT INTO usuarios (nome, email) VALUES (?, ?)
-                ''', (nome, email))
+                    INSERT INTO usuarios (nome, email, senha) VALUES (?, ?, ?)
+                ''', (nome, email, senha))
                 conn.commit()
                 user_id = cursor.lastrowid
                 print('Usuário adicionado com sucesso!')
@@ -52,10 +52,10 @@ class Agenda:
             print(f"Erro no banco de dados: {e}")
         return None
             
-    def login_user(self, email: str):
+    def login_user(self, email: str, senha: str):
         with self.db.connect() as conn:
             cursor = conn.cursor()
-            cursor.execute('SELECT id FROM usuarios WHERE email = ?', (email,))
+            cursor.execute('SELECT id FROM usuarios WHERE email = ? AND senha = ?', (email, senha))
             user = cursor.fetchone()
             
         if user:
