@@ -132,7 +132,8 @@ def task_menu(option, agenda, user_id):
             print('Opção inválida! Tente novamente.')
 
 def main():
-    agenda = Agenda()
+    senha = "Pedr@123"
+    agenda = Agenda(senha)
     user_id = None
     
     while not user_id:

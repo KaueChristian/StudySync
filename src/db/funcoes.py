@@ -1,11 +1,15 @@
 import sqlite3 as sq
 import datetime as dt
 from db.database import Database
+from seguranca import decrypt_data, encrypt_data
+from chave_segura import gerar_chave, carregar_chave
 
 class Agenda:
-    def __init__(self):
+    def __init__(self, senha:str):
         self.db = Database()
         self.check_and_create_tables()
+        self.gerar_chave = gerar_chave(senha)
+        self.carregar_chave = carregar_chave(senha)
 
     def check_and_create_tables(self):
         with self.db.connect() as conn:
@@ -17,7 +21,7 @@ class Agenda:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     nome TEXT NOT NULL,
                     email TEXT NOT NULL UNIQUE,
-                    senha TEXT
+                    senha TEXT NOT NULL
                 )
             ''')
             
@@ -37,11 +41,15 @@ class Agenda:
 
     def add_user(self, nome: str, email: str, senha: str):
         try:
+            
+            senha_criptografada = encrypt_data(senha, self.carregar_chave)
+            email_criptografado = encrypt_data(email, self.carregar_chave)
+            
             with self.db.connect() as conn:
                 cursor = conn.cursor()
                 cursor.execute('''
                     INSERT INTO usuarios (nome, email, senha) VALUES (?, ?, ?)
-                ''', (nome, email, senha))
+                ''', (nome, email_criptografado, senha_criptografada))
                 conn.commit()
                 user_id = cursor.lastrowid
                 print('Usuário adicionado com sucesso!')
@@ -56,13 +64,18 @@ class Agenda:
         with self.db.connect() as conn:
             cursor = conn.cursor()
             cursor.execute('SELECT id FROM usuarios WHERE email = ? AND senha = ?', (email, senha))
-            user = cursor.fetchone()
+            resultado:tuple = cursor.fetchone()
             
-        if user:
-            return user[0]
-        else:
+        if resultado:
+            senha_armazenada, email_armazenado = resultado
+            
+            senha_descriptografada = decrypt_data(senha_armazenada, self.carregar_chave)
+            email_descriptografada = decrypt_data(email_armazenado, self.carregar_chave)
+            
+            if senha == senha_descriptografada:
+                return email_descriptografada
             return None
-
+        
     def verificar_data(self, date_str: str) -> bool:
         try:
             input_date = dt.datetime.strptime(date_str, '%d-%m-%Y')
