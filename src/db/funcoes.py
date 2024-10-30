@@ -2,6 +2,7 @@ import sqlite3 as sq
 import datetime as dt
 from db.database import Database
 
+
 class Agenda:
     def __init__(self):
         self.db = Database()
@@ -34,7 +35,6 @@ class Agenda:
             ''')
             
             conn.commit()
-
     def add_user(self, nome: str, email: str, senha: str):
         try:
             with self.db.connect() as conn:
@@ -65,11 +65,16 @@ class Agenda:
         
     def verificar_data(self, date_str: str) -> bool:
         try:
-            input_date = dt.datetime.strptime(date_str, '%d-%m-%Y')
+            input_date = dt.datetime.strptime(date_str, '%d-%m-%Y %H:%M')
             today = dt.datetime.today()
-            return input_date > today
+            
+            if input_date <= today:
+                print("ERRO: A data e hora devem ser futuras.")
+                return False
+            
+            return True
         except ValueError:
-            print("Error: Tipo de data inválido.")
+            print("Error: Formato de data e hora inválido. Use DD-MM-YYYY HH:MM.")
             return False
         
     def add_task(self, discipline: str, subject: str, date_time: str, usuario_id: int):
@@ -83,8 +88,8 @@ class Agenda:
             return
         
         try:
-            parsed_date = dt.datetime.strptime(date_time, '%d-%m-%Y')
-            date_time_formatted = parsed_date.strftime('%Y-%m-%d %H:%M:%S')
+            parsed_date = dt.datetime.strptime(date_time, '%d-%m-%Y %H:%M')
+            date_time_formatted = parsed_date.strftime('%Y-%m-%d %H:%M')
         except ValueError:
             print('Formato de data inválido. Use DD-MM-YYYY HH:MM:SS.')
             return
@@ -98,6 +103,8 @@ class Agenda:
                 ''', (usuario_id, discipline, subject, date_time_formatted))
                 conn.commit()
                 print('Tarefa adicionada com sucesso!')
+        except ValueError:
+            print('Formato de data e hora inválido. Use DD-MM-YYYY HH:MM.')
         except sq.IntegrityError as e:
             print(f"Erro de integridade de dados: {e}")
         except sq.DatabaseError as e:
@@ -184,7 +191,7 @@ class Agenda:
         if not self.check_table_exists('tarefas'):
             print("A tabela 'tarefas' não existe. Por favor, crie uma agenda primeiro.")
             return
-        
+
         if not usuario_id:
             print("O usuario deve ser especificado.")
             return
@@ -195,17 +202,20 @@ class Agenda:
         if subject:
             fields['topico'] = subject
         if date_time:
-            try:
-                parsed_date = dt.datetime.strptime(date_time, '%d-%m-%Y')
-                fields['data'] = parsed_date.strftime('%Y-%m-%d %H:%M:%S')
-            except ValueError:
-                print('ERROR: Formato de data inválido. Use DD-MM-YYYY HH:MM:SS.')
+            if not self.verificar_data(date_time):
+                print("Erro: A data e hora devem estar no futuro e entre 5:00 e 00:00.")
                 return
-            
+            try:
+                parsed_date_time = dt.datetime.strptime(date_time, '%d-%m-%Y %H:%M')
+                fields['data'] = parsed_date_time.strftime('%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                print('ERROR: Formato de data e hora inválido. Use DD-MM-YYYY HH:MM.')
+                return
+
         if not fields:
             print("Nenhum campo para atualizar.")
             return
-
+        
         set_clause = ', '.join([f"{key} = ?" for key in fields.keys()])
         valores = list(fields.values())
         valores.extend([id, usuario_id])

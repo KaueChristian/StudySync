@@ -1,5 +1,8 @@
 from db.funcoes import Agenda
 import db.webscrape as ws
+import threading
+from notify import exibir_notificacao
+
 
 def display_user_menu():
     print(''' 
@@ -106,7 +109,6 @@ def task_menu(option, agenda, user_id):
             
             tarefa_id = int(tarefa_id_input)
             
-            # Instancie o objeto WebScrape com a agenda atual
             scraper = ws.WebScrape(agenda)
             result = scraper.web_scrape(tarefa_id)
             
@@ -142,7 +144,7 @@ def main():
             user_id = user_menu(option, agenda)
         except ValueError:
             print('Entrada inválida. Por favor, insira um número válido.')
-    
+        
     while True:
         display_task_menu()
         try:
