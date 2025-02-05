@@ -1,8 +1,5 @@
-from db.funcoes import Agenda
-import db.webscrape as ws
-import threading
-from notify import exibir_notificacao
-
+from models.funcoes import Agenda
+import models.webscrape as ws
 
 def display_user_menu():
     print(''' 
