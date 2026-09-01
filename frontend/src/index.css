@@ -1,0 +1,393 @@
+@import 'tailwindcss';
+
+/* Tailwind v4: habilita o modo escuro por classe no <html>. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ---------------------------------------------------------------------------
+   Design tokens
+   Uma única paleta declarada em :root e reescrita em .dark — assim nenhum
+   componente precisa duplicar cores com `dark:`.
+--------------------------------------------------------------------------- */
+@theme {
+  /* Verde-tinta — identidade "Caderno": escrita, papel, estudo. */
+  --color-brand-50: #f1f6ee;
+  --color-brand-100: #dfeade;
+  --color-brand-200: #c0d6bd;
+  --color-brand-300: #98bb90;
+  --color-brand-400: #6f9b66;
+  --color-brand-500: #4f7d47;
+  --color-brand-600: #3a6334;
+  --color-brand-700: #2e4f2a;
+  --color-brand-800: #253f22;
+  --color-brand-900: #1d321c;
+
+  --font-sans:
+    'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-mono:
+    ui-monospace, 'SF Mono', 'Cascadia Code', 'Roboto Mono', Menlo, monospace;
+
+  /* Cantos retos — cartão/etiqueta de papel, não bolha de SaaS. Redefine a
+     escala inteira do Tailwind: todo `rounded-lg`/`xl`/`2xl`/`3xl` do app
+     (botões, inputs, modais, chips) herda daqui sem precisar tocar em cada
+     componente. `rounded-full` continua intocado — reservado para o que é
+     de fato circular (interruptores, marcadores, avatares). */
+  --radius-sm: 0.0625rem;
+  --radius-md: 0.125rem;
+  --radius-lg: 0.1875rem;
+  --radius-xl: 0.25rem;
+  --radius-2xl: 0.3125rem;
+  --radius-3xl: 0.375rem;
+}
+
+:root {
+  /* Tema "papel": creme quente, tinta quase-preta. */
+  --surface: #fffdf8;
+  --surface-muted: #f6f1e6;
+  --surface-sunken: #efe7d6;
+  --surface-hover: #ece2cd;
+  --border: #e2d6bd;
+  --border-strong: #cbb98f;
+  --text: #2b2420;
+  --text-muted: #6b5c47;
+  --text-subtle: #9c8c73;
+  --ring: #3a6334;
+  --shadow-color: 30 25% 20%;
+}
+
+.dark {
+  /* Tema "tinta": charcoal quente, texto creme — mesmo par claro/escuro,
+     paleta diferente. */
+  --surface: #201c17;
+  --surface-muted: #17140f;
+  --surface-sunken: #13110d;
+  --surface-hover: #2a251d;
+  --border: #362f24;
+  --border-strong: #4a4132;
+  --text: #f3ead9;
+  --text-muted: #b7a98d;
+  --text-subtle: #8a7c63;
+  --ring: #98bb90;
+  --shadow-color: 20 40% 2%;
+}
+
+/* ---------------------------------------------------------------------------
+   Base
+--------------------------------------------------------------------------- */
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--surface-muted);
+    /* Textura sutil de papel pautado — reforça a identidade "caderno" sem
+       competir com o conteúdo. */
+    background-image: repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 27px,
+      hsl(var(--shadow-color) / 0.05) 27px,
+      hsl(var(--shadow-color) / 0.05) 28px
+    );
+    color: var(--text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Foco visível apenas para navegação por teclado. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background-color: var(--color-brand-500);
+    color: #fff;
+  }
+
+  /* Barra de rolagem discreta e coerente com o tema. */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--border-strong);
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--text-subtle);
+    background-clip: content-box;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Utilitários de superfície
+--------------------------------------------------------------------------- */
+@layer components {
+  .surface {
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+  }
+
+  .card {
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0.25rem;
+    box-shadow: 0 1px 2px hsl(var(--shadow-color) / 0.05);
+  }
+
+  .card-interactive {
+    transition:
+      box-shadow 180ms ease,
+      transform 180ms ease,
+      border-color 180ms ease;
+  }
+  .card-interactive:hover {
+    border-color: var(--color-brand-300);
+    box-shadow:
+      0 4px 12px hsl(var(--shadow-color) / 0.08),
+      0 2px 4px hsl(var(--shadow-color) / 0.04);
+    transform: translateY(-2px);
+  }
+
+  .text-muted {
+    color: var(--text-muted);
+  }
+  .text-subtle {
+    color: var(--text-subtle);
+  }
+
+  /* Títulos com a serif de identidade — logo, cabeçalhos de página, modais,
+     títulos de cartão. */
+  .font-display {
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  /* Placeholder de carregamento. */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--surface-sunken) 25%,
+      var(--surface-hover) 50%,
+      var(--surface-sunken) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.4s ease-in-out infinite;
+    border-radius: 0.25rem;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Conteúdo Markdown renderizado
+--------------------------------------------------------------------------- */
+@layer components {
+  .markdown-body {
+    color: var(--text);
+    line-height: 1.7;
+    word-break: break-word;
+  }
+  .markdown-body > * + * {
+    margin-top: 0.9em;
+  }
+  .markdown-body h1,
+  .markdown-body h2,
+  .markdown-body h3,
+  .markdown-body h4 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    line-height: 1.3;
+    margin-top: 1.6em;
+    letter-spacing: -0.01em;
+  }
+  .markdown-body h1 {
+    font-size: 1.6em;
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid var(--border);
+  }
+  .markdown-body h2 {
+    font-size: 1.3em;
+  }
+  .markdown-body h3 {
+    font-size: 1.12em;
+  }
+  .markdown-body a {
+    color: var(--color-brand-600);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .dark .markdown-body a {
+    color: var(--color-brand-400);
+  }
+  .markdown-body ul,
+  .markdown-body ol {
+    padding-left: 1.5em;
+  }
+  .markdown-body ul {
+    list-style: disc;
+  }
+  .markdown-body ol {
+    list-style: decimal;
+  }
+  .markdown-body li + li {
+    margin-top: 0.3em;
+  }
+  .markdown-body li::marker {
+    color: var(--text-subtle);
+  }
+  /* Checklists do GFM não recebem marcador. */
+  .markdown-body li:has(> input[type='checkbox']) {
+    list-style: none;
+    margin-left: -1.2em;
+  }
+  .markdown-body input[type='checkbox'] {
+    margin-right: 0.5em;
+    accent-color: var(--color-brand-600);
+  }
+  .markdown-body code {
+    font-family: var(--font-mono);
+    font-size: 0.87em;
+    background-color: var(--surface-sunken);
+    padding: 0.15em 0.4em;
+    border-radius: 0.35em;
+    border: 1px solid var(--border);
+  }
+  .markdown-body pre {
+    background-color: var(--surface-sunken);
+    border: 1px solid var(--border);
+    border-radius: 0.75em;
+    padding: 1em;
+    overflow-x: auto;
+  }
+  .markdown-body pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 0.85em;
+  }
+  .markdown-body blockquote {
+    border-left: 3px solid var(--color-brand-500);
+    padding-left: 1em;
+    color: var(--text-muted);
+    font-style: italic;
+  }
+  .markdown-body table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.92em;
+    display: block;
+    overflow-x: auto;
+  }
+  .markdown-body th,
+  .markdown-body td {
+    border: 1px solid var(--border);
+    padding: 0.5em 0.75em;
+    text-align: left;
+  }
+  .markdown-body th {
+    background-color: var(--surface-sunken);
+    font-weight: 600;
+  }
+  .markdown-body hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 1.6em 0;
+  }
+  .markdown-body img {
+    max-width: 100%;
+    border-radius: 0.5em;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Animações
+--------------------------------------------------------------------------- */
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 200ms ease-out;
+}
+.animate-slide-up {
+  animation: slide-up 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.animate-slide-in-right {
+  animation: slide-in-right 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.animate-scale-in {
+  animation: scale-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Respeita quem prefere menos movimento. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

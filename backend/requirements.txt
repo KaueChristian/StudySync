@@ -1,0 +1,30 @@
+# ============================================================================
+# StudySync - Dependências do Backend
+# Python >= 3.11 (testado em 3.14)
+# ============================================================================
+
+# --- Framework web e servidor ASGI ---
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+python-multipart>=0.0.12
+
+# --- Validação / configuração ---
+pydantic>=2.11.0
+pydantic-settings>=2.6.0
+email-validator>=2.2.0
+
+# --- Banco de dados ---
+SQLAlchemy>=2.0.43
+alembic>=1.14.0
+
+# --- Segurança ---
+PyJWT>=2.10.0
+bcrypt>=4.2.0
+bleach>=6.2.0
+
+# --- Web scraping / busca de conteúdo ---
+httpx>=0.28.0
+beautifulsoup4>=4.12.3
+
+# --- Agendamento de tarefas em segundo plano ---
+APScheduler>=3.11.0

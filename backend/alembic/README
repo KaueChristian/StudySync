@@ -1,0 +1,33 @@
+Migrations do StudySync (Alembic)
+=================================
+
+Todos os comandos devem ser executados a partir da pasta `backend/`, com o
+ambiente virtual ativado.
+
+Aplicar todas as migrations pendentes
+-------------------------------------
+    alembic upgrade head
+
+Gerar uma nova migration após alterar os modelos
+------------------------------------------------
+    alembic revision --autogenerate -m "descricao da mudanca"
+
+  Revise SEMPRE o arquivo gerado antes de aplicá-lo: o autogenerate não
+  detecta renomeações (interpreta como DROP + ADD, o que perde dados).
+
+Ver o estado atual / histórico
+------------------------------
+    alembic current
+    alembic history --verbose
+
+Reverter
+--------
+    alembic downgrade -1        # volta uma revisão
+    alembic downgrade base      # desfaz tudo
+
+Nota sobre SQLite
+-----------------
+`render_as_batch=True` está ativado no env.py. O SQLite não implementa
+`ALTER TABLE ... DROP COLUMN` nem alteração de tipo, então o Alembic recria a
+tabela, copia os dados e a renomeia. É transparente, mas exige que as
+constraints tenham nome — daí a `NAMING_CONVENTION` em `app/db/base.py`.
