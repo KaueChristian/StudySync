@@ -34,7 +34,7 @@ import time
 import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Iterable
-from urllib.parse import parse_qs, urlparse, urlunparse
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import httpx
 from bs4 import BeautifulSoup
@@ -173,7 +173,8 @@ STOPWORDS = {
     "a", "as", "ao", "aos", "com", "como", "da", "das", "de", "do", "dos",
     "e", "em", "na", "nas", "no", "nos", "o", "os", "ou", "para", "pelo",
     "por", "que", "se", "sobre", "um", "uma", "estudo", "estudar", "the",
-    "of", "and", "for", "to", "in", "on",
+    "of", "and", "for", "to", "in", "on", "is", "at", "by", "an", "it",
+    "me", "te", "eu",
 }
 
 
@@ -283,29 +284,55 @@ class ProviderHealth:
     intervenção manual).
     """
 
-    def __init__(self, threshold: int = 2, cooldown: float = 600.0) -> None:
-        self.threshold = threshold
-        self.cooldown = cooldown
+    def __init__(
+        self,
+        default_threshold: int = 2,
+        default_cooldown: float = 300.0,
+        provider_configs: dict[str, tuple[int, float]] | None = None,
+    ) -> None:
+        self.default_threshold = default_threshold
+        self.default_cooldown = default_cooldown
+        # Configuração personalizada: (threshold, cooldown em segundos)
+        # Wikipédia usa API JSON oficial (não sofre bloqueios anti-bot de scraping),
+        # então tem tolerância maior e cooldown curto (60s em vez de 300s/600s).
+        self.provider_configs = provider_configs or {
+            "wikipedia": (3, 60.0),
+            "duckduckgo": (2, 300.0),
+            "duckduckgo-lite": (2, 300.0),
+            "bing": (2, 300.0),
+        }
         self._failures: dict[str, int] = {}
         self._blocked_until: dict[str, float] = {}
+
+    def _get_config(self, name: str) -> tuple[int, float]:
+        return self.provider_configs.get(
+            name, (self.default_threshold, self.default_cooldown)
+        )
 
     def is_available(self, name: str) -> bool:
         until = self._blocked_until.get(name)
         return until is None or time.monotonic() >= until
+
+    def cooldown_remaining(self, name: str) -> float:
+        until = self._blocked_until.get(name)
+        if until is None:
+            return 0.0
+        return max(0.0, until - time.monotonic())
 
     def record_success(self, name: str) -> None:
         self._failures.pop(name, None)
         self._blocked_until.pop(name, None)
 
     def record_failure(self, name: str) -> None:
+        threshold, cooldown = self._get_config(name)
         count = self._failures.get(name, 0) + 1
         self._failures[name] = count
-        if count >= self.threshold:
-            self._blocked_until[name] = time.monotonic() + self.cooldown
+        if count >= threshold:
+            self._blocked_until[name] = time.monotonic() + cooldown
             logger.warning(
                 "Provedor %s em cooldown por %.0fs após %d falhas seguidas",
                 name,
-                self.cooldown,
+                cooldown,
                 count,
             )
 
@@ -325,7 +352,7 @@ def strip_accents(text: str) -> str:
 def tokenize(text: str) -> set[str]:
     """Extrai os termos significativos de uma frase."""
     words = re.findall(r"[a-z0-9]+", strip_accents(text.lower()))
-    return {w for w in words if len(w) > 2 and w not in STOPWORDS}
+    return {w for w in words if len(w) >= 2 and w not in STOPWORDS}
 
 
 def clean_ddg_redirect(url: str) -> str:
@@ -390,12 +417,13 @@ def normalize_url(url: str) -> str | None:
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         return None
 
-    kept = {
-        k: v
-        for k, v in parse_qs(parsed.query).items()
+    kept = [
+        (k, val)
+        for k, vals in sorted(parse_qs(parsed.query, keep_blank_values=True).items())
         if k.lower() not in TRACKING_PARAMS
-    }
-    query = "&".join(f"{k}={v[0]}" for k, v in sorted(kept.items()) if v)
+        for val in vals
+    ]
+    query = urlencode(kept, doseq=True)
     path = parsed.path.rstrip("/") or "/"
 
     return urlunparse((parsed.scheme, parsed.netloc.lower(), path, "", query, ""))
@@ -730,11 +758,26 @@ async def search_content(
             timeout=httpx.Timeout(settings.SCRAPER_TIMEOUT),
             follow_redirects=True,
         ) as client:
-            for provider_name, fetcher in PROVIDERS:
-                if not _health.is_available(provider_name):
-                    logger.debug("Provedor %s em cooldown, pulando", provider_name)
-                    continue
+            providers_to_try = [
+                (name, fetcher) for name, fetcher in PROVIDERS if _health.is_available(name)
+            ]
+            if not providers_to_try:
+                # Se todos os provedores estiverem em cooldown, não abortamos a frio com 503:
+                # tentamos a Wikipédia (rede de segurança) ou o provedor com menor tempo restante.
+                best_fallback = min(
+                    PROVIDERS,
+                    key=lambda p: (
+                        0 if p[0] == "wikipedia" else 1,
+                        _health.cooldown_remaining(p[0]),
+                    ),
+                )
+                logger.warning(
+                    "Todos os provedores em cooldown. Tentando rede de segurança (%s)",
+                    best_fallback[0],
+                )
+                providers_to_try = [best_fallback]
 
+            for provider_name, fetcher in providers_to_try:
                 try:
                     raw_results = await fetcher(client, query)
                 except Exception as exc:  # noqa: BLE001 — cascata de fallback
@@ -766,11 +809,12 @@ async def search_content(
                     )
                     return outcome
 
-                # Sem resultados úteis não é bem uma exceção, mas conta como
-                # falha pro disjuntor — é assim que um bloqueio "silencioso"
-                # (ex.: DDG devolvendo uma página vazia com 200/202) se
-                # manifesta.
-                _health.record_failure(provider_name)
+                # Sem resultados úteis nos buscadores de scraping é como um bloqueio
+                # "silencioso" se manifesta (ex.: DDG devolvendo página vazia com 200/202).
+                # Para a Wikipédia (API oficial), busca sem artigos é normal e não
+                # deve contar como falha do disjuntor.
+                if provider_name != "wikipedia":
+                    _health.record_failure(provider_name)
                 logger.info("Provedor %s não retornou resultados úteis", provider_name)
 
     raise SearchEngineError(

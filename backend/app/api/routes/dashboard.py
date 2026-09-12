@@ -59,6 +59,19 @@ def get_dashboard(current_user: CurrentUser, db: DbSession) -> DashboardResponse
         select(func.count(SearchResult.id)).where(SearchResult.owner_id == user_id)
     ) or 0
 
+    sessions_pending = db.scalar(
+        select(func.count(Schedule.id)).where(
+            Schedule.owner_id == user_id,
+            Schedule.status == ScheduleStatus.PENDING,
+        )
+    ) or 0
+    sessions_overdue = db.scalar(
+        select(func.count(Schedule.id)).where(
+            Schedule.owner_id == user_id,
+            Schedule.status == ScheduleStatus.PENDING,
+            Schedule.start_at < now,
+        )
+    ) or 0
     sessions_upcoming = db.scalar(
         select(func.count(Schedule.id)).where(
             Schedule.owner_id == user_id,
@@ -190,6 +203,8 @@ def get_dashboard(current_user: CurrentUser, db: DbSession) -> DashboardResponse
             subjects=subjects_count,
             notes=notes_count,
             saved_links=links_count,
+            sessions_pending=sessions_pending,
+            sessions_overdue=sessions_overdue,
             sessions_upcoming=sessions_upcoming,
             sessions_completed=sessions_completed,
             sessions_today=sessions_today,

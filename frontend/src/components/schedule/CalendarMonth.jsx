@@ -9,7 +9,6 @@ import { useMemo } from 'react'
 import {
   addDays,
   eachDayOfInterval,
-  endOfMonth,
   format,
   isSameDay,
   isSameMonth,
@@ -105,7 +104,9 @@ export default function CalendarMonth({
               type="button"
               onClick={() => onSelectDate(day)}
               aria-label={`${format(day, "d 'de' MMMM", { locale: ptBR })}${
-                dayItems.length ? `, ${dayItems.length} sessões` : ''
+                dayItems.length
+                  ? `, ${dayItems.length} ${dayItems.length === 1 ? 'sessão' : 'sessões'}`
+                  : ''
               }`}
               aria-pressed={selected}
               className={`relative flex aspect-square flex-col items-center justify-center rounded-lg text-sm transition-colors ${

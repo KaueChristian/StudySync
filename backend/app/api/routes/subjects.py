@@ -14,6 +14,7 @@ from app.models.schedule import Schedule
 from app.models.subject import Subject
 from app.schemas.common import Message
 from app.schemas.subject import SubjectCreate, SubjectRead, SubjectUpdate
+from app.services.tags import cleanup_orphan_tags
 
 router = APIRouter()
 
@@ -154,5 +155,8 @@ def delete_subject(
     """
     subject = get_owned_subject(db, current_user.id, subject_id)
     db.delete(subject)
+    db.commit()
+
+    cleanup_orphan_tags(db, current_user.id)
     db.commit()
     return Message(detail="Matéria excluída com sucesso.")

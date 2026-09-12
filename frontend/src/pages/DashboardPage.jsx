@@ -198,11 +198,17 @@ export default function DashboardPage() {
             <StatCard
               icon={CalendarClock}
               label="Sessões pendentes"
-              value={stats.sessions_upcoming}
+              value={stats.sessions_pending ?? stats.sessions_upcoming}
               hint={
-                stats.minutes_scheduled_week
-                  ? `${formatMinutes(stats.minutes_scheduled_week)} planejados nos próximos 7 dias`
-                  : undefined
+                stats.sessions_overdue > 0
+                  ? `${stats.sessions_overdue} em atraso${
+                      stats.minutes_scheduled_week
+                        ? ` · ${formatMinutes(stats.minutes_scheduled_week)} planejados`
+                        : ''
+                    }`
+                  : stats.minutes_scheduled_week
+                    ? `${formatMinutes(stats.minutes_scheduled_week)} planejados nos próximos 7 dias`
+                    : undefined
               }
               to="/agenda"
               accent="bg-brand-50 text-brand-600 dark:bg-brand-500/12 dark:text-brand-400"

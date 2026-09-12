@@ -17,6 +17,14 @@ const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 
 export const apiUrl = (path = '') => `${API_BASE}/api${path}`
 
+/** Retorna a URL absoluta completa (essencial para feeds públicos como o link .ics). */
+export const absoluteApiUrl = (path = '') => {
+  const url = apiUrl(path)
+  if (/^https?:\/\//i.test(url)) return url
+  const origin = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : ''
+  return `${origin}${url}`
+}
+
 // ---------------------------------------------------------------------------
 // Armazenamento dos tokens
 // ---------------------------------------------------------------------------

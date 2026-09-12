@@ -134,9 +134,21 @@ export default function SubjectsPage() {
   }
 
   const handleDelete = async (subject) => {
+    const parts = []
+    if (subject.notes_count > 0) {
+      parts.push(`${subject.notes_count} ${subject.notes_count === 1 ? 'anotação' : 'anotações'}`)
+    }
+    if (subject.schedules_count > 0) {
+      parts.push(`${subject.schedules_count} ${subject.schedules_count === 1 ? 'sessão' : 'sessões'}`)
+    }
+    const description =
+      parts.length > 0
+        ? `${parts.join(' e ')} vinculada(s) a esta matéria também serão excluídas. Esta ação não pode ser desfeita.`
+        : 'Esta matéria será excluída permanentemente. Esta ação não pode ser desfeita.'
+
     const ok = await confirm({
       title: `Excluir "${subject.name}"?`,
-      description: `Todas as ${subject.notes_count} anotações e ${subject.schedules_count} sessões vinculadas a esta matéria também serão excluídas. Esta ação não pode ser desfeita.`,
+      description,
       confirmLabel: 'Excluir matéria',
     })
     if (!ok) return

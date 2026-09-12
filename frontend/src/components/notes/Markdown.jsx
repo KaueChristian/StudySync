@@ -21,11 +21,11 @@ export default function Markdown({ children, className = '' }) {
         components={{
           // Links externos abrem em nova aba, sem vazar o referrer nem
           // dar acesso a `window.opener`.
-          a: ({ node, ...props }) => (
+          a: ({ node: _node, ...props }) => (
             <a {...props} target="_blank" rel="noopener noreferrer nofollow" />
           ),
           // Checklists do GFM são apenas visuais (o estado vive no Markdown).
-          input: ({ node, ...props }) => <input {...props} disabled readOnly />,
+          input: ({ node: _node, ...props }) => <input {...props} disabled readOnly />,
         }}
       >
         {children}

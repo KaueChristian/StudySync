@@ -6,8 +6,6 @@ Responsabilidades
 * **scan_reminders** (a cada `REMINDER_POLL_SECONDS`): encontra sessões cujo
   horário de lembrete já chegou, cria a notificação no banco e a empurra pelo
   WebSocket.
-* **mark_overdue_sessions** (a cada 15 min): não faz nada destrutivo — apenas
-  registra métrica de sessões vencidas para o dashboard.
 * **purge_expired_tokens** (diariamente): limpa refresh tokens expirados.
 
 Por que polling e não um job por agendamento?

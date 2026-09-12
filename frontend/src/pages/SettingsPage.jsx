@@ -21,7 +21,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useNotifications } from '@/context/NotificationContext'
 import { useTheme } from '@/context/ThemeContext'
 import { useToast } from '@/context/ToastContext'
-import { apiUrl, getErrorMessage } from '@/lib/api'
+import { absoluteApiUrl, getErrorMessage } from '@/lib/api'
 import { authService, scheduleService } from '@/lib/services'
 import { REMINDER_OPTIONS } from '@/lib/constants'
 import { formatDate } from '@/lib/format'
@@ -142,7 +142,7 @@ export default function SettingsPage() {
     setLoadingLink(true)
     try {
       const { token } = await scheduleService.getExportToken()
-      setSubscribeUrl(`${apiUrl('/schedules/export.ics')}?token=${token}`)
+      setSubscribeUrl(`${absoluteApiUrl('/schedules/export.ics')}?token=${token}`)
     } catch (err) {
       toast.error(getErrorMessage(err, 'Não foi possível gerar o link.'))
     } finally {

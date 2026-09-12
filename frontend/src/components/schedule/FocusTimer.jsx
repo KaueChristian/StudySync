@@ -71,7 +71,7 @@ export default function FocusTimer({ open, onClose, schedule, onComplete }) {
   const [remaining, setRemaining] = useState(PRESETS[0].focus * 60)
 
   const targetAtRef = useRef(null)
-  const rafRef = useRef(null)
+  const timerRef = useRef(null)
 
   const preset = PRESETS[presetIndex]
   const phaseMinutes = useMemo(() => {
@@ -112,12 +112,13 @@ export default function FocusTimer({ open, onClose, schedule, onComplete }) {
     }
   }, [phase, cycle, preset, resetClock, toast])
 
-  // Laço de contagem: recalcula a partir do timestamp-alvo a cada quadro,
-  // então atrasos do navegador (aba em segundo plano) não desalinham o
-  // relógio exibido.
+  // Laço de contagem: usa setInterval com base no timestamp-alvo.
+  // Garante que o relógio continue correndo e finalize pontualmente mesmo
+  // com a aba em segundo plano ou janela minimizada (onde requestAnimationFrame
+  // é congelado pelo navegador).
   useEffect(() => {
     if (!running) {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+      if (timerRef.current) clearInterval(timerRef.current)
       return undefined
     }
 
@@ -125,25 +126,35 @@ export default function FocusTimer({ open, onClose, schedule, onComplete }) {
       targetAtRef.current = Date.now() + remaining * 1000
     }
 
-    const tick = () => {
+    const checkTime = () => {
+      if (!targetAtRef.current) return
       const secondsLeft = Math.ceil((targetAtRef.current - Date.now()) / 1000)
       if (secondsLeft <= 0) {
+        if (timerRef.current) clearInterval(timerRef.current)
         setRemaining(0)
         setRunning(false)
         targetAtRef.current = null
         advancePhase()
         return
       }
-      setRemaining(secondsLeft)
-      rafRef.current = requestAnimationFrame(tick)
+      setRemaining((prev) => (prev !== secondsLeft ? secondsLeft : prev))
     }
 
-    rafRef.current = requestAnimationFrame(tick)
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    checkTime()
+    timerRef.current = setInterval(checkTime, 250)
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkTime()
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [running])
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [running, advancePhase])
 
   const toggleRunning = () => {
     if (!running) targetAtRef.current = Date.now() + remaining * 1000

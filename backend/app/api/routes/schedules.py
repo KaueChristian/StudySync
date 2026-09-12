@@ -8,11 +8,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 
 from app.core.deps import CurrentUser, DbSession, UserFromIcsToken
 from app.db.base import ensure_utc
+from app.models.notification import Notification
 from app.models.schedule import Schedule, ScheduleStatus
 from app.models.subject import Subject
 from app.schemas.common import Message
@@ -352,6 +353,11 @@ def delete_schedule(
     schedule = get_owned_schedule(db, current_user.id, schedule_id)
 
     if scope == "this" or schedule.recurrence_group_id is None:
+        db.execute(
+            update(Notification)
+            .where(Notification.schedule_id == schedule.id)
+            .values(schedule_id=None)
+        )
         db.delete(schedule)
         db.commit()
         return Message(detail="Agendamento excluído com sucesso.")
@@ -365,6 +371,13 @@ def delete_schedule(
 
     group = db.scalars(query).all()
     count = len(group)
+    ids = [item.id for item in group]
+    if ids:
+        db.execute(
+            update(Notification)
+            .where(Notification.schedule_id.in_(ids))
+            .values(schedule_id=None)
+        )
     for item in group:
         db.delete(item)
     db.commit()
