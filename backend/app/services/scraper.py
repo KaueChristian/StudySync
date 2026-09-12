@@ -26,7 +26,9 @@ cache em memória (evita repetir a mesma consulta) e limite de concorrência.
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
+import random
 import re
 import time
 import unicodedata
@@ -41,17 +43,73 @@ from app.core.config import settings
 
 logger = logging.getLogger("studysync.scraper")
 
-USER_AGENT = (
+# Pool pequeno de User-Agents realistas (navegadores/SOs comuns). Alternar
+# entre eles evita a impressão digital estática de "sempre o mesmo cliente",
+# um dos sinais mais óbvios de scraping automatizado.
+USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-)
+    "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 "
+    "(KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 "
+    "Firefox/125.0",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/125.0.0.0 Safari/537.36",
+]
 
-BASE_HEADERS = {
-    "User-Agent": USER_AGENT,
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
-    "Referer": "https://duckduckgo.com/",
-}
+
+def _browser_headers(referer: str) -> dict[str, str]:
+    """
+    Monta um conjunto de cabeçalhos parecido com o de um navegador real
+    **navegando** (não chamando uma API) — usado pelos três buscadores, que
+    servem HTML e usam esses sinais de navegação pra detectar automação.
+
+    User-Agent sorteado a cada requisição + os cabeçalhos `Sec-Fetch-*` que
+    um navegador sempre envia e um cliente HTTP simples não; `referer`
+    coerente com o site de destino (chegar no Bing "vindo" do DuckDuckGo,
+    por exemplo, é uma inconsistência que também pesa contra o pedido).
+    """
+    return {
+        "User-Agent": random.choice(USER_AGENTS),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+        # Não anunciar "br" (brotli) sem httpx[brotli] instalado; do contrário
+        # o buscador responde em brotli, httpx devolve bytes crus e o parser falha.
+        "Accept-Encoding": "gzip, deflate",
+        "Referer": referer,
+        "DNT": "1",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "same-origin",
+        "Sec-Fetch-User": "?1",
+        "Cache-Control": "no-cache",
+    }
+
+
+def _wikipedia_headers() -> dict[str, str]:
+    """
+    Cabeçalhos pra API da Wikipédia — deliberadamente diferentes dos usados
+    contra os buscadores.
+
+    A API do MediaWiki não é uma parede anti-bot: é feita pra ser chamada
+    programaticamente, e a própria Wikimedia recomenda um User-Agent honesto
+    e descritivo em vez de imitar um navegador (política em
+    https://meta.wikimedia.org/wiki/User-Agent_policy). Fingir uma navegação
+    de página completa (`Sec-Fetch-Dest: document`) numa chamada de API JSON
+    é, na prática, um sinal *mais* suspeito, não menos — foi exatamente isso
+    que causava um 403 aqui antes desta separação.
+    """
+    return {
+        "User-Agent": (
+            "StudySync/1.0 (https://github.com/KaueChristian/StudySync; "
+            "projeto educacional de agendamento de estudos) httpx"
+        ),
+        "Accept": "application/json",
+        "Accept-Language": "pt-BR,pt;q=0.9",
+    }
 
 # ---------------------------------------------------------------------------
 # Heurísticas de confiabilidade
@@ -149,6 +207,27 @@ class SearchEngineError(RuntimeError):
     """Nenhum provedor conseguiu responder à consulta."""
 
 
+class BlockedByProviderError(RuntimeError):
+    """O provedor detectou a requisição como automatizada e bloqueou/desafiou."""
+
+
+def _raise_if_blocked(provider_name: str, response: httpx.Response) -> None:
+    """
+    Detecta bloqueio/desafio anti-bot que não aparece como erro HTTP comum.
+
+    O DuckDuckGo, por exemplo, responde **202** com uma página de "checando
+    seu navegador" em vez de um 4xx/5xx — `raise_for_status()` não pega isso,
+    e sem esta checagem o provedor pareceria apenas "sem resultados" em vez de
+    "bloqueado", o que confunde o diagnóstico e não alimenta o disjuntor de
+    circuito (`ProviderHealth`) que evita insistir num provedor já bloqueado.
+    """
+    response.raise_for_status()
+    if response.status_code == 202:
+        raise BlockedByProviderError(
+            f"{provider_name} devolveu 202 (provável desafio anti-bot)"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Cache TTL em memória
 # ---------------------------------------------------------------------------
@@ -191,6 +270,49 @@ _cache = TTLCache(ttl=settings.SCRAPER_CACHE_TTL)
 _semaphore = asyncio.Semaphore(4)
 
 
+class ProviderHealth:
+    """
+    Disjuntor de circuito simples por provedor.
+
+    Sem isso, um provedor bloqueado (ex.: DuckDuckGo devolvendo um desafio
+    anti-bot) seria tentado do zero em **toda** busca — desperdiçando tempo
+    de resposta e, pior, mantendo o tráfego repetitivo que motivou o bloqueio
+    em primeiro lugar. Depois de `threshold` falhas seguidas, o provedor fica
+    em "cooldown" por um tempo e as buscas pulam direto para o próximo da
+    cascata; passado o cooldown, ele volta a ser tentado normalmente (sem
+    intervenção manual).
+    """
+
+    def __init__(self, threshold: int = 2, cooldown: float = 600.0) -> None:
+        self.threshold = threshold
+        self.cooldown = cooldown
+        self._failures: dict[str, int] = {}
+        self._blocked_until: dict[str, float] = {}
+
+    def is_available(self, name: str) -> bool:
+        until = self._blocked_until.get(name)
+        return until is None or time.monotonic() >= until
+
+    def record_success(self, name: str) -> None:
+        self._failures.pop(name, None)
+        self._blocked_until.pop(name, None)
+
+    def record_failure(self, name: str) -> None:
+        count = self._failures.get(name, 0) + 1
+        self._failures[name] = count
+        if count >= self.threshold:
+            self._blocked_until[name] = time.monotonic() + self.cooldown
+            logger.warning(
+                "Provedor %s em cooldown por %.0fs após %d falhas seguidas",
+                name,
+                self.cooldown,
+                count,
+            )
+
+
+_health = ProviderHealth()
+
+
 # ---------------------------------------------------------------------------
 # Utilitários de texto e URL
 # ---------------------------------------------------------------------------
@@ -219,6 +341,42 @@ def clean_ddg_redirect(url: str) -> str:
         target = parse_qs(parsed.query).get("uddg")
         if target:
             return target[0]
+    return url
+
+
+def clean_bing_redirect(url: str) -> str:
+    """
+    Extrai a URL real de um link de rastreamento de clique do Bing.
+
+    O Bing envolve resultados orgânicos em `bing.com/ck/a?...&u=a1<base64>`.
+    Sem desembrulhar isso, todo resultado "vira" o domínio `bing.com` aos
+    olhos do ranking — o que disparava o limite de 2 links por domínio do
+    `dedupe_and_rank` e travava a busca em só 2 resultados (todos URLs de
+    redirecionamento que não abrem direito fora de uma sessão do Bing).
+    """
+    parsed = urlparse(url)
+    if "bing.com" not in parsed.netloc or not parsed.path.startswith("/ck/a"):
+        return url
+
+    encoded = parse_qs(parsed.query).get("u")
+    if not encoded:
+        return url
+
+    value = encoded[0]
+    # O prefixo "a1" marca o esquema de codificação (base64); outros
+    # prefixos não documentados são deixados como estão.
+    if not value.startswith("a1"):
+        return url
+    value = value[2:]
+
+    padded = value + "=" * (-len(value) % 4)
+    for decoder in (base64.urlsafe_b64decode, base64.b64decode):
+        try:
+            decoded = decoder(padded).decode("utf-8")
+        except Exception:  # noqa: BLE001 — tenta o próximo esquema
+            continue
+        if decoded.startswith(("http://", "https://")):
+            return decoded
     return url
 
 
@@ -259,9 +417,9 @@ async def _fetch_duckduckgo_html(
     response = await client.post(
         "https://html.duckduckgo.com/html/",
         data={"q": query, "kl": settings.SCRAPER_REGION, "df": ""},
-        headers=BASE_HEADERS,
+        headers=_browser_headers(referer="https://duckduckgo.com/"),
     )
-    response.raise_for_status()
+    _raise_if_blocked("duckduckgo", response)
     soup = BeautifulSoup(response.text, "html.parser")
 
     results: list[RawResult] = []
@@ -289,9 +447,9 @@ async def _fetch_duckduckgo_lite(
     response = await client.post(
         "https://lite.duckduckgo.com/lite/",
         data={"q": query, "kl": settings.SCRAPER_REGION},
-        headers=BASE_HEADERS,
+        headers=_browser_headers(referer="https://lite.duckduckgo.com/"),
     )
-    response.raise_for_status()
+    _raise_if_blocked("duckduckgo-lite", response)
     soup = BeautifulSoup(response.text, "html.parser")
 
     results: list[RawResult] = []
@@ -329,9 +487,9 @@ async def _fetch_bing(client: httpx.AsyncClient, query: str) -> list[RawResult]:
     response = await client.get(
         "https://www.bing.com/search",
         params={"q": query, "setlang": "pt-br", "cc": "BR", "count": 15},
-        headers=BASE_HEADERS,
+        headers=_browser_headers(referer="https://www.bing.com/"),
     )
-    response.raise_for_status()
+    _raise_if_blocked("bing", response)
     soup = BeautifulSoup(response.text, "html.parser")
 
     results: list[RawResult] = []
@@ -344,7 +502,7 @@ async def _fetch_bing(client: httpx.AsyncClient, query: str) -> list[RawResult]:
         results.append(
             RawResult(
                 title=anchor.get_text(" ", strip=True),
-                url=str(anchor["href"]),
+                url=clean_bing_redirect(str(anchor["href"])),
                 snippet=snippet_el.get_text(" ", strip=True) if snippet_el else None,
                 position=position,
             )
@@ -369,7 +527,7 @@ async def _fetch_wikipedia(client: httpx.AsyncClient, query: str) -> list[RawRes
             "format": "json",
             "utf8": 1,
         },
-        headers={**BASE_HEADERS, "Accept": "application/json"},
+        headers=_wikipedia_headers(),
     )
     response.raise_for_status()
     payload = response.json()
@@ -558,18 +716,23 @@ async def search_content(
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(settings.SCRAPER_TIMEOUT),
             follow_redirects=True,
-            headers=BASE_HEADERS,
         ) as client:
             for provider_name, fetcher in PROVIDERS:
+                if not _health.is_available(provider_name):
+                    logger.debug("Provedor %s em cooldown, pulando", provider_name)
+                    continue
+
                 try:
                     raw_results = await fetcher(client, query)
                 except Exception as exc:  # noqa: BLE001 — cascata de fallback
                     logger.warning("Provedor %s falhou: %s", provider_name, exc)
                     errors.append(f"{provider_name}: {exc}")
+                    _health.record_failure(provider_name)
                     continue
 
                 ranked = dedupe_and_rank(raw_results, query, limit)
                 if ranked:
+                    _health.record_success(provider_name)
                     outcome = SearchOutcome(
                         query=query,
                         provider=provider_name,
@@ -587,6 +750,11 @@ async def search_content(
                     )
                     return outcome
 
+                # Sem resultados úteis não é bem uma exceção, mas conta como
+                # falha pro disjuntor — é assim que um bloqueio "silencioso"
+                # (ex.: DDG devolvendo uma página vazia com 200/202) se
+                # manifesta.
+                _health.record_failure(provider_name)
                 logger.info("Provedor %s não retornou resultados úteis", provider_name)
 
     raise SearchEngineError(
