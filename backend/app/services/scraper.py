@@ -614,12 +614,14 @@ def score_result(result: RawResult, query_terms: set[str]) -> float:
 
 
 def dedupe_and_rank(
-    raw_results: Iterable[RawResult], query: str, limit: int
+    raw_results: Iterable[RawResult],
+    query: str,
+    limit: int,
+    max_per_domain: int = 2,
 ) -> list[RawResult]:
     """Normaliza, remove duplicatas, pontua e devolve os `limit` melhores."""
     query_terms = tokenize(query)
     seen_urls: set[str] = set()
-    domain_count: dict[str, int] = {}
     candidates: list[RawResult] = []
 
     for result in raw_results:
@@ -631,18 +633,13 @@ def dedupe_and_rank(
         if not title or len(title) < 3:
             continue
 
-        domain = domain_of(url)
-        # No máximo 2 links por domínio — favorece diversidade de fontes.
-        if domain_count.get(domain, 0) >= 2:
-            continue
-
         seen_urls.add(url)
-        domain_count[domain] = domain_count.get(domain, 0) + 1
 
         snippet = result.snippet
         if snippet:
             snippet = re.sub(r"\s+", " ", snippet).strip()[:600]
 
+        domain = domain_of(url)
         scored = RawResult(
             title=title[:300],
             url=url,
@@ -653,8 +650,24 @@ def dedupe_and_rank(
         scored.score = score_result(scored, query_terms)
         candidates.append(scored)
 
+    # Ordena todos os candidatos por relevância decrescente (desempate por posição original).
     candidates.sort(key=lambda r: (-r.score, r.position))
-    return candidates[:limit]
+
+    # Aplica o limite por domínio após a pontuação:
+    # 1. Garante os melhores links de cada domínio (não os primeiros recebidos do buscador).
+    # 2. Permite teto flexível (ex.: provedores mono-domínio como a Wikipédia podem entregar até `limit`).
+    domain_count: dict[str, int] = {}
+    selected: list[RawResult] = []
+    for candidate in candidates:
+        domain = candidate.source or domain_of(candidate.url)
+        if domain_count.get(domain, 0) >= max_per_domain:
+            continue
+        domain_count[domain] = domain_count.get(domain, 0) + 1
+        selected.append(candidate)
+        if len(selected) >= limit:
+            break
+
+    return selected
 
 
 # ---------------------------------------------------------------------------
@@ -730,7 +743,10 @@ async def search_content(
                     _health.record_failure(provider_name)
                     continue
 
-                ranked = dedupe_and_rank(raw_results, query, limit)
+                max_per_domain = limit if provider_name == "wikipedia" else 2
+                ranked = dedupe_and_rank(
+                    raw_results, query, limit, max_per_domain=max_per_domain
+                )
                 if ranked:
                     _health.record_success(provider_name)
                     outcome = SearchOutcome(
