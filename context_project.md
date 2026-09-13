@@ -315,7 +315,7 @@ raio fixo, para que futuras mudanças de identidade visual continuem sendo de ba
 | 2 | Logo e imagens próprias por seção/opção do menu | Nada | ❌ Adiado pelo autor | O autor pediu explicitamente para não avançar nisso ainda ("preciso refinar mais algumas coisas") — não iniciar sem sinal verde |
 | 3 | Empacotamento desktop (dados 100% locais, sem depender de hospedagem) | Redesign visual (✅) | ✅ Concluído (2026-09-13, rota a) | Implementado em `desktop/` e validado com o `.exe` real (§3, "Empacotamento desktop"). Pendências conhecidas em §6: sem ícone próprio (depende do item 2), sem instalador nem assinatura de código, lembretes só com o app aberto. Rotas avaliadas originalmente com o autor: **(a)** PyInstaller (backend inteiro + frontend buildado servido pelo FastAPI) + `pywebview` (janela nativa via WebView2, sem Chromium embutido) — caminho mais simples, recomendado; **(b)** Tauri com o mesmo `.exe` do PyInstaller como sidecar — instalador mais "profissional", mais setup (toolchain Rust). Eletron foi descartado — exigiria ou reescrever o backend em Node ou rodar o mesmo sidecar Python com ~150MB+ de Chromium embutido, sem ganho real sobre as outras duas opções |
 | 4 | Suíte de testes automatizados (backend e frontend) | Nada | ❌ Não existe | Ver débito técnico em §6 — toda validação até agora foi manual/ao vivo, não há rede de segurança automatizada |
-| 5 | Distribuição pelo GitHub Releases (instalador + zip) e app desktop sem login | Item 3 | 🟡 Workflow manual OK e build da CI usado pelo autor; falta a tag | Decisões em §7 (2026-09-13). Mergeado na `main` (PR #1). Para publicar: merge da correção das notificações, tag `v1.0.0`, revisar o rascunho do Release |
+| 5 | Distribuição pelo GitHub Releases (instalador + zip) e app desktop sem login | Item 3 | 🟡 Workflow manual OK e build da CI usado pelo autor; falta a tag | Decisões em §7 (2026-09-13). Mergeado na `main` (PR #1; correção das notificações no PR #2, execução manual #2 do workflow com sucesso). Para publicar: tag `v1.0.0` e revisar o rascunho do Release |
 
 ---
 
@@ -363,8 +363,15 @@ raio fixo, para que futuras mudanças de identidade visual continuem sendo de ba
     logo depois, mas não um dia inteiro fechado.
   - **Sem ícone próprio** (usa o padrão do PyInstaller/Python) — de propósito: logo e imagens
     são o item 2 do roadmap, adiado pelo autor.
-  - **Sem assinatura de código.** O SmartScreen alerta na primeira execução em outra máquina
-    (README e notas do Release explicam). O instalador já existe (Inno Setup, 2026-09-13). O
+  - **Sem assinatura de código.** São dois avisos, e ambos se repetem a **cada versão nova**
+    (hash novo = reputação zero): o **navegador bloqueia o download** como "potencialmente
+    perigoso" (relatado pelo autor em 2026-09-13 ao baixar o artefato da execução #2, após o
+    merge do PR #2) e o **SmartScreen** alerta ao abrir. Não é detecção: o Windows Defender
+    (assinaturas 1.459.190.0) não achou nada na pasta do app, no instalador nem no zip, e não
+    havia detecção de StudySync registrada na máquina. README e notas do Release explicam como
+    liberar no Edge/Chrome/Firefox e como conferir o SHA-256. Solução definitiva: assinatura —
+    gratuita para open source via SignPath Foundation (assina em nome da fundação), ou paga
+    (Azure Artifact Signing, certificados OV); nenhuma pula a fase de reputação. O instalador já existe (Inno Setup, 2026-09-13). O
     `.exe` também exige o WebView2 Runtime (nativo no Windows 11 e na maioria dos 10) — o
     instalador não verifica nem instala o runtime.
   - **Workflow de release:** a execução manual passou (§3); o caminho por tag, que cria o
@@ -424,6 +431,12 @@ raio fixo, para que futuras mudanças de identidade visual continuem sendo de ba
 > Toda entrada de trabalho relevante entra aqui, mais recente no topo. Formato: `data — o que
 > mudou — arquivo(s) — por quê`.
 
+- **2026-09-13 (5)** — **Instruções de download para executável sem assinatura.** O autor
+  relatou o navegador bloqueando o download do artefato da execução #2 (commit `c5b0a6e`,
+  Success). Verificado que é reputação, não detecção (Defender limpo, ver §6). Arquivos:
+  `README.md` (seção "Download": "Avisos esperados na instalação" com passos para Edge, Chrome
+  e Firefox, conferência de SHA-256 e SmartScreen) e `desktop/release-notes.md` (mesmo
+  conteúdo nas notas do Release). Nenhum código alterado. Branch `docs/download-instructions`.
 - **2026-09-13 (4)** — **Notificações do sistema no desktop corrigidas.** Relato do autor após
   instalar o artefato da execução manual do workflow (Success, 2m26s): tudo funcionou, mas ao
   clicar em "Ativar" as notificações apareciam como bloqueadas. Causa e validação em §3,
