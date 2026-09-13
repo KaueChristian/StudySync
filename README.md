@@ -1,8 +1,8 @@
 # 📚 StudySync
 
-Aplicação web completa para **gerenciar matérias, anotações e sessões de estudo**, com
-lembretes em tempo real e um motor de **busca de conteúdo de apoio na web** — sem custo
-de API externa.
+Aplicação para **gerenciar matérias, anotações e sessões de estudo**, com lembretes em
+tempo real e um motor de **busca de conteúdo de apoio na web** — sem custo de API externa.
+Roda como **app desktop no Windows** (local, sem login) ou como aplicação web.
 
 ```
 ┌──────────────────────┐   REST + WebSocket   ┌───────────────────────────┐
@@ -17,6 +17,26 @@ de API externa.
                                     │ + Alembic │              │  DDG → Bing → Wikipédia │
                                     └───────────┘              └─────────────────────────┘
 ```
+
+---
+
+## ⬇️ Download (Windows)
+
+Baixe a versão mais recente em **[Releases](https://github.com/KaueChristian/StudySync/releases/latest)**:
+
+| Arquivo | Para quem |
+|---|---|
+| `StudySync-Setup-<versão>.exe` | **Recomendado.** Instala para o seu usuário (sem pedir administrador), com atalho no Menu Iniciar e desinstalador |
+| `StudySync-<versão>-win64.zip` | Portátil: extraia a pasta `StudySync` inteira e abra o `StudySync.exe` de dentro dela |
+
+- **Sem conta nem login** — o app desktop é local e de um usuário só.
+- **Aviso "O Windows protegeu o computador":** o executável ainda não tem assinatura digital.
+  Clique em **Mais informações → Executar assim mesmo**. Os arquivos são gerados pelo
+  GitHub Actions a partir deste código; confira o hash com o `SHA256SUMS.txt` do Release
+  (`Get-FileHash .\arquivo -Algorithm SHA256`).
+- Dados em `%LOCALAPPDATA%\StudySync`, mantidos ao atualizar ou desinstalar.
+- Requer o WebView2 Runtime (já incluso no Windows 11 e na maioria das instalações do 10).
+- A busca de conteúdo usa a internet; o resto funciona offline.
 
 ---
 
@@ -42,7 +62,7 @@ de API externa.
 **Pré-requisitos:** Python ≥ 3.11 · Node.js ≥ 18 · Git
 
 ```bash
-git clone <url-do-repositorio>
+git clone https://github.com/KaueChristian/StudySync.git
 cd StudySync
 ```
 
@@ -151,6 +171,21 @@ migrado sozinho no boot.
 > entregue apenas à janela do app, então nenhum outro programa ou site aberto no navegador
 > consegue ler seus dados pela porta local. O modo web (`npm run dev`) continua com cadastro e
 > login.
+
+#### Publicar uma versão
+
+Instalador, zip e checksums são gerados por `desktop\release.ps1` — localmente (requer
+[Inno Setup 6](https://jrsoftware.org/isinfo.php)) ou pelo GitHub Actions
+([`.github/workflows/release.yml`](.github/workflows/release.yml)):
+
+1. Atualize a versão em `backend/app/core/config.py` (`VERSION`) **e** em
+   `frontend/package.json` — o script falha se as duas, ou a tag, não baterem.
+2. Commit, depois crie e envie a tag: `git tag v1.0.0` e `git push origin v1.0.0`.
+3. O workflow gera os arquivos e cria um **Release em rascunho** com eles e as notas de
+   `desktop/release-notes.md`. Revise no GitHub e clique em **Publish release**.
+
+Para testar o pipeline sem publicar nada: **Actions → Release desktop (Windows) → Run
+workflow** gera os mesmos arquivos como artefato do workflow.
 
 ---
 

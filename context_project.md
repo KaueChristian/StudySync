@@ -216,6 +216,10 @@ durante o teste para inspecionar a janela real.
 | Modo local — renovação de sessão sem login | ✅ | Com o `localStorage` apagado (cenário "porta diferente"): nova sessão pela ponte, **mesmo usuário** (id 1 → 1) e dados preservados. Com access e refresh inválidos (cenário "7 dias sem abrir"): o interceptor caiu para a ponte e a página `/materias` carregou normalmente com token novo |
 | Modo local — caminho de falha (acesso de fora da janela) | ✅ | `GET /api/subjects` sem token → 401; `POST /auth/login` com o e-mail local → 401 (senha aleatória descartada); `http://127.0.0.1:8765/` aberto num navegador comum → `window.pywebview` indefinido, nenhum token, tela "Não foi possível abrir sua área de estudos." |
 | Modo web inalterado | ✅ | `npm run build` sem a marcação não contém o código da ponte (`pywebviewready` ausente do bundle); rota protegida redireciona para `/login` com a tela de login e a conta demo; pela API: cadastro 201, login 200, senha errada 401, refresh 200, reuso de refresh 401 "Sessão comprometida" e o refresh seguinte também 401; `user_agent`/`ip_address` continuam gravados no refresh token após a refatoração de `auth.py`. `npm run lint`: 0 erros |
+| **Release local** (`desktop\release.ps1 -Version 1.0.0`, o mesmo que a CI roda) | ✅ | Gerou `StudySync-Setup-1.0.0.exe` (23,1 MB), `StudySync-1.0.0-win64.zip` (27,1 MB) e `SHA256SUMS.txt` (sem BOM, LF, hashes conferidos com `Get-FileHash`). Caminho de falha: `-Version 9.9.9` com o código em `1.0.0` aborta com "A tag pede a versão 9.9.9, mas o código declara 1.0.0" |
+| Instalador (Inno Setup, instalado em pasta descartável, modo silencioso) | ✅ | Instalação exit 0 com `StudySync.exe` e `unins000.exe`; atalho no Menu Iniciar e entrada "StudySync 1.0.0 / Kaue Christian" em Programas instalados (HKCU); app instalado subiu (`/health` ok). **Atualizar com o app aberto** foi recusado (exit 1, "O Instalador detectou que o StudySync está atualmente em execução"); com o app fechado, exit 0 e banco com o mesmo hash. Desinstalação exit 0: pasta, `_internal`, atalho e registro removidos; `studysync.db` e `secret.key` preservados |
+| Zip portátil | ✅ | Extraído: a raiz do zip é a pasta `StudySync\` com o `.exe` dentro; o app subiu direto dela e fechou liberando a porta |
+| Workflow do GitHub Actions (`.github/workflows/release.yml`) | 🟡 Escrito, **não executado** | Só roda no GitHub (depende de push). Verificado localmente: as actions `checkout`, `setup-python`, `setup-node` e `upload-artifact` estão na última major (v7, conferida na API do GitHub) e os parâmetros usados existem no `action.yml` de cada uma; os passos chamam o mesmo `release.ps1` validado acima. O Inno Setup local é 6.0.x (2020) e a CI instala o 6.7.1 pelo Chocolatey — o `.iss` usa só diretivas aceitas pelas duas. Primeira validação real: "Run workflow" manual ou a primeira tag |
 | Download do `.ics` e abertura de links externos pela janela | 🟡 Configurado, não exercitado | `ALLOW_DOWNLOADS` e `OPEN_EXTERNAL_LINKS_IN_BROWSER` ligados no launcher, mas não cliquei neles no teste (gravaria em Downloads / abriria o navegador da máquina). Verificar na primeira execução manual |
 
 ---
@@ -277,6 +281,13 @@ desktop/                          — empacotamento Windows (roadmap item 3, rot
   StudySync.spec                  — PyInstaller (modo pasta): app/, alembic/ como arquivos, frontend/dist
   build.ps1                       — npm run build + PyInstaller → desktop/dist/StudySync/StudySync.exe
   requirements.txt                — pywebview, pythonnet, pyinstaller (só para gerar o .exe)
+  installer.iss                   — instalador Inno Setup (por usuário, sem admin; AppId fixo)
+  release.ps1                     — confere versões, roda build.ps1, gera instalador + zip + SHA256SUMS
+                                    em desktop/release/
+  release-notes.md                — texto fixo das notas do Release (download, SmartScreen, dados)
+
+.github/workflows/release.yml     — tag v* → release.ps1 → Release em rascunho com os arquivos;
+                                    execução manual → só artefato
   (o backend serve o build do frontend quando `FRONTEND_DIST` está definido — `main.py`, rota
    curinga registrada por último; vazio = API pura, como em desenvolvimento)
 
@@ -303,6 +314,7 @@ raio fixo, para que futuras mudanças de identidade visual continuem sendo de ba
 | 2 | Logo e imagens próprias por seção/opção do menu | Nada | ❌ Adiado pelo autor | O autor pediu explicitamente para não avançar nisso ainda ("preciso refinar mais algumas coisas") — não iniciar sem sinal verde |
 | 3 | Empacotamento desktop (dados 100% locais, sem depender de hospedagem) | Redesign visual (✅) | ✅ Concluído (2026-09-13, rota a) | Implementado em `desktop/` e validado com o `.exe` real (§3, "Empacotamento desktop"). Pendências conhecidas em §6: sem ícone próprio (depende do item 2), sem instalador nem assinatura de código, lembretes só com o app aberto. Rotas avaliadas originalmente com o autor: **(a)** PyInstaller (backend inteiro + frontend buildado servido pelo FastAPI) + `pywebview` (janela nativa via WebView2, sem Chromium embutido) — caminho mais simples, recomendado; **(b)** Tauri com o mesmo `.exe` do PyInstaller como sidecar — instalador mais "profissional", mais setup (toolchain Rust). Eletron foi descartado — exigiria ou reescrever o backend em Node ou rodar o mesmo sidecar Python com ~150MB+ de Chromium embutido, sem ganho real sobre as outras duas opções |
 | 4 | Suíte de testes automatizados (backend e frontend) | Nada | ❌ Não existe | Ver débito técnico em §6 — toda validação até agora foi manual/ao vivo, não há rede de segurança automatizada |
+| 5 | Distribuição pelo GitHub Releases (instalador + zip) e app desktop sem login | Item 3 | 🟡 Implementado e validado localmente; workflow ainda não rodou no GitHub | Decisões em §7 (2026-09-13). Para publicar: merge em `main`, tag `v1.0.0`, revisar o rascunho do Release. Antes disso, vale uma execução manual do workflow |
 
 ---
 
@@ -350,9 +362,12 @@ raio fixo, para que futuras mudanças de identidade visual continuem sendo de ba
     logo depois, mas não um dia inteiro fechado.
   - **Sem ícone próprio** (usa o padrão do PyInstaller/Python) — de propósito: logo e imagens
     são o item 2 do roadmap, adiado pelo autor.
-  - **Sem instalador e sem assinatura de código.** A distribuição é a pasta
-    `desktop\dist\StudySync\` inteira; o SmartScreen do Windows deve alertar em outra máquina.
-    O `.exe` também exige o WebView2 Runtime (nativo no Windows 11 e na maioria dos 10).
+  - **Sem assinatura de código.** O SmartScreen alerta na primeira execução em outra máquina
+    (README e notas do Release explicam). O instalador já existe (Inno Setup, 2026-09-13). O
+    `.exe` também exige o WebView2 Runtime (nativo no Windows 11 e na maioria dos 10) — o
+    instalador não verifica nem instala o runtime.
+  - **O workflow de release nunca rodou no GitHub** — ver §3. Até a primeira execução, é código
+    não validado de ponta a ponta.
   - **Fontes vêm do Google Fonts** (`index.html`). Sem internet, títulos caem para Georgia e o
     texto para Segoe UI — a identidade "Caderno" fica parcial offline. Empacotar Fraunces/Inter
     em `frontend/public` resolveria (a busca de conteúdo continua exigindo internet de todo modo).
@@ -401,6 +416,28 @@ raio fixo, para que futuras mudanças de identidade visual continuem sendo de ba
 > Toda entrada de trabalho relevante entra aqui, mais recente no topo. Formato: `data — o que
 > mudou — arquivo(s) — por quê`.
 
+- **2026-09-13 (3)** — **Preparação para a primeira release pública.** Na branch
+  `feat/desktop-release` (não mergeada, nada enviado ao GitHub). (1) Commit do empacotamento
+  desktop. (2) `LICENSE` MIT criado — o README já declarava MIT sem o arquivo. (3) **App
+  desktop sem login** (decisão em §7): `backend/app/services/sessions.py` (emissão de tokens
+  extraída de `auth.py` + `issue_local_session`), `desktop/launcher.py` (`DesktopBridge` via
+  `js_api`), `frontend/src/lib/desktop.js`, `api.js` (renovação pela ponte e texto de erro
+  próprio), `AuthContext.jsx`, `RouteGuards.jsx`, `AppLayout.jsx`, `SettingsPage.jsx`,
+  `desktop/build.ps1` (`VITE_DESKTOP=true`). Isso também resolveu os textos de "conta demo" e
+  "localhost:8000" no desktop, a sessão que vencia em 7 dias e o novo login ao cair em outra
+  porta (§6). (4) Contradição corrigida neste documento: o changelog citava uma "suíte de 9
+  testes automatizados" que não existe no repositório. (5) Pipeline de release:
+  `desktop/installer.iss`, `desktop/release.ps1`, `desktop/release-notes.md`,
+  `.github/workflows/release.yml`, `.gitignore` (`desktop/release/`) e README (seções
+  "Download" e "Publicar uma versão"; URL real no `git clone`). Validação em §3: modo local na
+  janela real (sem login, fumaça completa com lembrete, renovação sem tokens e com tokens
+  inválidos, API fechada fora da janela, navegador comum sem sessão), modo web inalterado
+  (login/refresh/reuso pela API, tela de login no navegador), release local completo,
+  instalador (instalar, recusar atualização com o app aberto, atualizar, desinstalar
+  preservando dados) e zip portátil. **O workflow não foi executado** (depende de push).
+  Testes feitos com `LOCALAPPDATA` e pasta de instalação descartáveis; o `%LOCALAPPDATA%\StudySync`
+  real não foi criado e a instalação de teste foi desinstalada; portas 8765 e 8792 conferidas
+  livres com HTTP real.
 - **2026-09-13 (2)** — **Empacotamento desktop (roadmap item 3, rota a) implementado e
   validado com o `.exe` real.** Arquivos: novos `desktop/launcher.py`, `desktop/StudySync.spec`,
   `desktop/build.ps1` e `desktop/requirements.txt`; `backend/app/core/config.py` (setting

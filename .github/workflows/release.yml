@@ -1,0 +1,77 @@
+# ============================================================================
+# StudySync — release do app desktop (Windows)
+#
+# Tag v* (ex.: v1.0.0): gera instalador + zip + SHA256SUMS com
+# desktop/release.ps1 e cria um Release em RASCUNHO com os arquivos — revise
+# e clique em "Publish release" no GitHub.
+# Execução manual (Actions → Run workflow): gera os mesmos arquivos como
+# artefato do workflow, sem criar Release.
+# ============================================================================
+name: Release desktop (Windows)
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            desktop/requirements.txt
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependências
+        shell: pwsh
+        run: |
+          python -m venv backend\venv
+          backend\venv\Scripts\python.exe -m pip install --upgrade pip
+          backend\venv\Scripts\python.exe -m pip install -r desktop\requirements.txt
+          npm ci --prefix frontend
+
+      - name: Instalar Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Gerar instalador, zip e checksums
+        shell: pwsh
+        run: |
+          # Numa tag, a versão dela precisa bater com a do código (o script falha se não bater).
+          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME.TrimStart('v') } else { '' }
+          ./desktop/release.ps1 -Version $version
+
+      - name: Criar Release (rascunho)
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $files = (Get-ChildItem desktop/release -File).FullName
+          gh release create $env:GITHUB_REF_NAME @files `
+            --draft `
+            --title "StudySync $env:GITHUB_REF_NAME" `
+            --notes-file desktop/release-notes.md `
+            --generate-notes
+
+      - name: Guardar arquivos (execução manual)
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v7
+        with:
+          name: StudySync-windows
+          path: desktop/release/*
