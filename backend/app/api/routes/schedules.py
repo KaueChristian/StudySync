@@ -18,6 +18,7 @@ from app.models.schedule import Schedule, ScheduleStatus
 from app.models.subject import Subject
 from app.schemas.common import Message
 from app.schemas.schedule import (
+    MAX_DURATION_HOURS,
     IcsTokenRead,
     ScheduleCreate,
     ScheduleRead,
@@ -291,11 +292,18 @@ def update_schedule(
     # só `start_at`, e o novo início precisa continuar antes do fim gravado.
     start_at = ensure_utc(schedule.start_at)
     end_at = ensure_utc(schedule.end_at)
-    if start_at and end_at and end_at <= start_at:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="O horário de término deve ser posterior ao de início.",
-        )
+    if start_at and end_at:
+        if end_at <= start_at:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="O horário de término deve ser posterior ao de início.",
+            )
+        duration = (end_at - start_at).total_seconds() / 3600
+        if duration > MAX_DURATION_HOURS:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"A sessão não pode ultrapassar {MAX_DURATION_HOURS} horas.",
+            )
 
     if REMINDER_FIELDS & data.keys():
         schedule.remind_at = compute_remind_at(

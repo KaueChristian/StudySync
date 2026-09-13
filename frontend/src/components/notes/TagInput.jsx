@@ -23,9 +23,20 @@ export default function TagInput({ value = [], onChange, suggestions = [], label
   }, [suggestions, value, draft])
 
   const add = (raw) => {
-    const tag = raw.trim().toLowerCase()
-    if (!tag || value.includes(tag) || value.length >= MAX_TAGS) return
-    onChange([...value, tag])
+    if (!raw) return
+    const parts = raw
+      .split(',')
+      .map((p) => p.trim().toLowerCase())
+      .filter(Boolean)
+    if (!parts.length) return
+    const newTags = [...value]
+    for (const tag of parts) {
+      if (newTags.length >= MAX_TAGS) break
+      if (!newTags.includes(tag)) {
+        newTags.push(tag)
+      }
+    }
+    onChange(newTags)
     setDraft('')
   }
 
@@ -37,6 +48,14 @@ export default function TagInput({ value = [], onChange, suggestions = [], label
       add(draft)
     } else if (event.key === 'Backspace' && !draft && value.length) {
       remove(value[value.length - 1])
+    }
+  }
+
+  const handlePaste = (event) => {
+    const pasted = event.clipboardData.getData('text')
+    if (pasted && pasted.includes(',')) {
+      event.preventDefault()
+      add(pasted)
     }
   }
 
@@ -74,6 +93,7 @@ export default function TagInput({ value = [], onChange, suggestions = [], label
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           onBlur={() => draft.trim() && add(draft)}
           disabled={value.length >= MAX_TAGS}
           placeholder={value.length ? '' : 'anatomia, prova…'}

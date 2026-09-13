@@ -28,7 +28,7 @@ from app.schemas.search import (
     SearchResultItem,
     SearchResultRead,
 )
-from app.services.scraper import SearchEngineError, search_content
+from app.services.scraper import SearchEngineError, normalize_url, search_content
 
 logger = logging.getLogger("studysync.search")
 
@@ -147,7 +147,7 @@ def save_result(
                 detail="Agendamento não encontrado.",
             )
 
-    url = str(payload.url)
+    url = normalize_url(str(payload.url)) or str(payload.url).strip()
 
     # Idempotência: salvar o mesmo link duas vezes devolve o registro existente.
     duplicate = db.scalar(

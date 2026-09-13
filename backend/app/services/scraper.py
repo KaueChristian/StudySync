@@ -452,15 +452,28 @@ async def _fetch_duckduckgo_html(
 
     results: list[RawResult] = []
     for position, block in enumerate(soup.select("div.result, div.web-result")):
+        # Pula blocos de anúncio
+        block_classes = " ".join(block.get("class", []))
+        if "result--ad" in block_classes or "badge--ad" in block_classes or block.select_one(".badge--ad, .result--ad"):
+            continue
+
         anchor = block.select_one("a.result__a")
         if not anchor or not anchor.get("href"):
+            continue
+
+        raw_href = str(anchor["href"])
+        if "/y.js?" in raw_href or "ad_domain=" in raw_href:
+            continue
+
+        clean_url = clean_ddg_redirect(raw_href)
+        if "/y.js?" in clean_url or "duckduckgo.com/y.js" in clean_url:
             continue
 
         snippet_el = block.select_one(".result__snippet")
         results.append(
             RawResult(
                 title=anchor.get_text(" ", strip=True),
-                url=clean_ddg_redirect(str(anchor["href"])),
+                url=clean_url,
                 snippet=snippet_el.get_text(" ", strip=True) if snippet_el else None,
                 position=position,
             )
@@ -484,7 +497,11 @@ async def _fetch_duckduckgo_lite(
     anchors = soup.select("a.result-link")
     for position, anchor in enumerate(anchors):
         href = anchor.get("href")
-        if not href:
+        if not href or "/y.js?" in str(href) or "ad_domain=" in str(href):
+            continue
+
+        clean_url = clean_ddg_redirect(str(href))
+        if "/y.js?" in clean_url or "duckduckgo.com/y.js" in clean_url:
             continue
 
         # O snippet vive em uma <tr> seguinte, na célula .result-snippet.
@@ -668,6 +685,10 @@ def dedupe_and_rank(
             snippet = re.sub(r"\s+", " ", snippet).strip()[:600]
 
         domain = domain_of(url)
+        # O buscador não é conteúdo de estudo; links internos/rastreamento são ignorados
+        if domain in {"duckduckgo.com", "bing.com"} or "/y.js" in url:
+            continue
+
         scored = RawResult(
             title=title[:300],
             url=url,

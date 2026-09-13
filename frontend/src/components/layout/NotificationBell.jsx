@@ -46,7 +46,7 @@ export default function NotificationBell() {
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        aria-label={`Notificações${unread ? ` (${unread} não lidas)` : ''}`}
+        aria-label={`Notificações${unread ? ` (${unread} ${unread === 1 ? 'não lida' : 'não lidas'})` : ''}`}
         aria-expanded={open}
         className="relative rounded-xl p-2.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text)]"
       >

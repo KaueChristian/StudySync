@@ -33,6 +33,7 @@ engine: Engine = create_engine(
 
 
 if _is_sqlite:
+    from app.core.sanitize import strip_accents
 
     @event.listens_for(engine, "connect")
     def _set_sqlite_pragmas(dbapi_connection, _connection_record) -> None:
@@ -41,6 +42,9 @@ if _is_sqlite:
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA synchronous=NORMAL")
         cursor.close()
+
+        if hasattr(dbapi_connection, "create_function"):
+            dbapi_connection.create_function("unaccent", 1, strip_accents)
 
 
 SessionLocal = sessionmaker(
