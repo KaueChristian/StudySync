@@ -134,6 +134,42 @@ class DesktopBridge:
         return issue_local_session(timezone_name)
 
 
+def allow_notification_permission(window, origin: str) -> None:
+    """
+    Libera as notificações do sistema para a interface do app.
+
+    Sem isso o WebView2 responde `denied` a `Notification.requestPermission()`
+    na hora, sem perguntar nada (o pywebview não trata `PermissionRequested`),
+    e grava o `denied` no perfil — builds anteriores deixaram esse estado
+    salvo, e ele não sai sozinho. Como é um app desktop, as notificações já
+    abrem liberadas; quem quiser desligar usa Configurações → Notificações do
+    Windows. Só notificações são tocadas: as demais permissões seguem o padrão.
+    """
+    from Microsoft.Web.WebView2.Core import (
+        CoreWebView2PermissionKind,
+        CoreWebView2PermissionState,
+    )
+    from System import Func, Type
+
+    notifications = CoreWebView2PermissionKind.Notifications
+    allow = CoreWebView2PermissionState.Allow
+
+    def on_permission_requested(_sender, args) -> None:
+        # Cobre um pedido feito antes de o estado abaixo terminar de gravar.
+        if args.PermissionKind == notifications:
+            args.State = allow
+            args.SavesInProfile = True
+
+    def attach() -> None:
+        core = window.native.browser.webview.CoreWebView2
+        core.PermissionRequested += on_permission_requested
+        # Sobrescreve inclusive um `denied` salvo por versões anteriores.
+        core.Profile.SetPermissionStateAsync(notifications, origin, allow)
+
+    # Objetos do WebView2 só podem ser tocados na thread da interface.
+    window.native.Invoke(Func[Type](attach))
+
+
 def main() -> int:
     mutex = acquire_single_instance()
     if mutex is None:
@@ -188,7 +224,7 @@ def main() -> int:
     webview.settings["ALLOW_DOWNLOADS"] = True
     webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
 
-    webview.create_window(
+    window = webview.create_window(
         APP_NAME,
         f"http://{HOST}:{port}/",
         width=1280,
@@ -197,6 +233,17 @@ def main() -> int:
         background_color="#f6f1e6",  # --surface-muted, evita o flash branco
         js_api=DesktopBridge(),
     )
+
+    # `loaded` dispara a cada navegação; o handler só precisa entrar uma vez,
+    # depois que o CoreWebView2 existe.
+    def on_first_load() -> None:
+        window.events.loaded -= on_first_load
+        try:
+            allow_notification_permission(window, f"http://{HOST}:{port}")
+        except Exception:
+            logger.exception("Não foi possível habilitar as notificações do sistema")
+
+    window.events.loaded += on_first_load
     webview.start(private_mode=False, storage_path=str(data / "webview"))
 
     # Janela fechada: encerra o servidor pelo caminho normal (lifespan desliga o agendador).
