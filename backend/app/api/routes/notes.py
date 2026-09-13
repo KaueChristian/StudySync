@@ -11,6 +11,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 
 from app.core.deps import CurrentUser, DbSession
+from app.core.sanitize import escape_like, strip_accents
 from app.models.note import Note
 from app.models.search_result import SearchResult
 from app.models.subject import Subject
@@ -25,7 +26,7 @@ router = APIRouter()
 SortField = Literal["updated_at", "created_at", "title"]
 
 # Marcações Markdown removidas ao gerar o resumo de listagem.
-_MARKDOWN_NOISE = re.compile(r"(```.*?```|`[^`]*`|[*_>#\[\]()!-]|\r)", re.DOTALL)
+_MARKDOWN_NOISE = re.compile(r"(```.*?```|`[^`]*`|[*_>#\[\]()!|~-]|\r)", re.DOTALL)
 
 
 def _excerpt(content: str, length: int = 180) -> str:
@@ -101,9 +102,13 @@ def list_notes(
             Tag.name == tag.lower().strip(), Tag.owner_id == current_user.id
         )
     if search:
-        pattern = f"%{search.strip()}%"
+        clean_search = strip_accents(search.strip())
+        pattern = f"%{escape_like(clean_search)}%"
         base = base.where(
-            or_(Note.title.ilike(pattern), Note.content.ilike(pattern))
+            or_(
+                func.unaccent(Note.title).like(pattern, escape="\\"),
+                func.unaccent(Note.content).like(pattern, escape="\\"),
+            )
         )
 
     total = db.scalar(
@@ -113,7 +118,7 @@ def list_notes(
     sort_column = {
         "updated_at": Note.updated_at,
         "created_at": Note.created_at,
-        "title": func.lower(Note.title),
+        "title": func.unaccent(Note.title),
     }[sort]
     direction = sort_column.asc() if order == "asc" else sort_column.desc()
 

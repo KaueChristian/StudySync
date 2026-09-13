@@ -26,13 +26,15 @@ cache em memória (evita repetir a mesma consulta) e limite de concorrência.
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
+import random
 import re
 import time
 import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Iterable
-from urllib.parse import parse_qs, urlparse, urlunparse
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import httpx
 from bs4 import BeautifulSoup
@@ -41,17 +43,73 @@ from app.core.config import settings
 
 logger = logging.getLogger("studysync.scraper")
 
-USER_AGENT = (
+# Pool pequeno de User-Agents realistas (navegadores/SOs comuns). Alternar
+# entre eles evita a impressão digital estática de "sempre o mesmo cliente",
+# um dos sinais mais óbvios de scraping automatizado.
+USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-)
+    "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 "
+    "(KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 "
+    "Firefox/125.0",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/125.0.0.0 Safari/537.36",
+]
 
-BASE_HEADERS = {
-    "User-Agent": USER_AGENT,
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
-    "Referer": "https://duckduckgo.com/",
-}
+
+def _browser_headers(referer: str) -> dict[str, str]:
+    """
+    Monta um conjunto de cabeçalhos parecido com o de um navegador real
+    **navegando** (não chamando uma API) — usado pelos três buscadores, que
+    servem HTML e usam esses sinais de navegação pra detectar automação.
+
+    User-Agent sorteado a cada requisição + os cabeçalhos `Sec-Fetch-*` que
+    um navegador sempre envia e um cliente HTTP simples não; `referer`
+    coerente com o site de destino (chegar no Bing "vindo" do DuckDuckGo,
+    por exemplo, é uma inconsistência que também pesa contra o pedido).
+    """
+    return {
+        "User-Agent": random.choice(USER_AGENTS),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+        # Não anunciar "br" (brotli) sem httpx[brotli] instalado; do contrário
+        # o buscador responde em brotli, httpx devolve bytes crus e o parser falha.
+        "Accept-Encoding": "gzip, deflate",
+        "Referer": referer,
+        "DNT": "1",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "same-origin",
+        "Sec-Fetch-User": "?1",
+        "Cache-Control": "no-cache",
+    }
+
+
+def _wikipedia_headers() -> dict[str, str]:
+    """
+    Cabeçalhos pra API da Wikipédia — deliberadamente diferentes dos usados
+    contra os buscadores.
+
+    A API do MediaWiki não é uma parede anti-bot: é feita pra ser chamada
+    programaticamente, e a própria Wikimedia recomenda um User-Agent honesto
+    e descritivo em vez de imitar um navegador (política em
+    https://meta.wikimedia.org/wiki/User-Agent_policy). Fingir uma navegação
+    de página completa (`Sec-Fetch-Dest: document`) numa chamada de API JSON
+    é, na prática, um sinal *mais* suspeito, não menos — foi exatamente isso
+    que causava um 403 aqui antes desta separação.
+    """
+    return {
+        "User-Agent": (
+            "StudySync/1.0 (https://github.com/KaueChristian/StudySync; "
+            "projeto educacional de agendamento de estudos) httpx"
+        ),
+        "Accept": "application/json",
+        "Accept-Language": "pt-BR,pt;q=0.9",
+    }
 
 # ---------------------------------------------------------------------------
 # Heurísticas de confiabilidade
@@ -115,7 +173,8 @@ STOPWORDS = {
     "a", "as", "ao", "aos", "com", "como", "da", "das", "de", "do", "dos",
     "e", "em", "na", "nas", "no", "nos", "o", "os", "ou", "para", "pelo",
     "por", "que", "se", "sobre", "um", "uma", "estudo", "estudar", "the",
-    "of", "and", "for", "to", "in", "on",
+    "of", "and", "for", "to", "in", "on", "is", "at", "by", "an", "it",
+    "me", "te", "eu",
 }
 
 
@@ -147,6 +206,27 @@ class SearchOutcome:
 
 class SearchEngineError(RuntimeError):
     """Nenhum provedor conseguiu responder à consulta."""
+
+
+class BlockedByProviderError(RuntimeError):
+    """O provedor detectou a requisição como automatizada e bloqueou/desafiou."""
+
+
+def _raise_if_blocked(provider_name: str, response: httpx.Response) -> None:
+    """
+    Detecta bloqueio/desafio anti-bot que não aparece como erro HTTP comum.
+
+    O DuckDuckGo, por exemplo, responde **202** com uma página de "checando
+    seu navegador" em vez de um 4xx/5xx — `raise_for_status()` não pega isso,
+    e sem esta checagem o provedor pareceria apenas "sem resultados" em vez de
+    "bloqueado", o que confunde o diagnóstico e não alimenta o disjuntor de
+    circuito (`ProviderHealth`) que evita insistir num provedor já bloqueado.
+    """
+    response.raise_for_status()
+    if response.status_code == 202:
+        raise BlockedByProviderError(
+            f"{provider_name} devolveu 202 (provável desafio anti-bot)"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -191,6 +271,75 @@ _cache = TTLCache(ttl=settings.SCRAPER_CACHE_TTL)
 _semaphore = asyncio.Semaphore(4)
 
 
+class ProviderHealth:
+    """
+    Disjuntor de circuito simples por provedor.
+
+    Sem isso, um provedor bloqueado (ex.: DuckDuckGo devolvendo um desafio
+    anti-bot) seria tentado do zero em **toda** busca — desperdiçando tempo
+    de resposta e, pior, mantendo o tráfego repetitivo que motivou o bloqueio
+    em primeiro lugar. Depois de `threshold` falhas seguidas, o provedor fica
+    em "cooldown" por um tempo e as buscas pulam direto para o próximo da
+    cascata; passado o cooldown, ele volta a ser tentado normalmente (sem
+    intervenção manual).
+    """
+
+    def __init__(
+        self,
+        default_threshold: int = 2,
+        default_cooldown: float = 300.0,
+        provider_configs: dict[str, tuple[int, float]] | None = None,
+    ) -> None:
+        self.default_threshold = default_threshold
+        self.default_cooldown = default_cooldown
+        # Configuração personalizada: (threshold, cooldown em segundos)
+        # Wikipédia usa API JSON oficial (não sofre bloqueios anti-bot de scraping),
+        # então tem tolerância maior e cooldown curto (60s em vez de 300s/600s).
+        self.provider_configs = provider_configs or {
+            "wikipedia": (3, 60.0),
+            "duckduckgo": (2, 300.0),
+            "duckduckgo-lite": (2, 300.0),
+            "bing": (2, 300.0),
+        }
+        self._failures: dict[str, int] = {}
+        self._blocked_until: dict[str, float] = {}
+
+    def _get_config(self, name: str) -> tuple[int, float]:
+        return self.provider_configs.get(
+            name, (self.default_threshold, self.default_cooldown)
+        )
+
+    def is_available(self, name: str) -> bool:
+        until = self._blocked_until.get(name)
+        return until is None or time.monotonic() >= until
+
+    def cooldown_remaining(self, name: str) -> float:
+        until = self._blocked_until.get(name)
+        if until is None:
+            return 0.0
+        return max(0.0, until - time.monotonic())
+
+    def record_success(self, name: str) -> None:
+        self._failures.pop(name, None)
+        self._blocked_until.pop(name, None)
+
+    def record_failure(self, name: str) -> None:
+        threshold, cooldown = self._get_config(name)
+        count = self._failures.get(name, 0) + 1
+        self._failures[name] = count
+        if count >= threshold:
+            self._blocked_until[name] = time.monotonic() + cooldown
+            logger.warning(
+                "Provedor %s em cooldown por %.0fs após %d falhas seguidas",
+                name,
+                cooldown,
+                count,
+            )
+
+
+_health = ProviderHealth()
+
+
 # ---------------------------------------------------------------------------
 # Utilitários de texto e URL
 # ---------------------------------------------------------------------------
@@ -203,7 +352,7 @@ def strip_accents(text: str) -> str:
 def tokenize(text: str) -> set[str]:
     """Extrai os termos significativos de uma frase."""
     words = re.findall(r"[a-z0-9]+", strip_accents(text.lower()))
-    return {w for w in words if len(w) > 2 and w not in STOPWORDS}
+    return {w for w in words if len(w) >= 2 and w not in STOPWORDS}
 
 
 def clean_ddg_redirect(url: str) -> str:
@@ -222,6 +371,42 @@ def clean_ddg_redirect(url: str) -> str:
     return url
 
 
+def clean_bing_redirect(url: str) -> str:
+    """
+    Extrai a URL real de um link de rastreamento de clique do Bing.
+
+    O Bing envolve resultados orgânicos em `bing.com/ck/a?...&u=a1<base64>`.
+    Sem desembrulhar isso, todo resultado "vira" o domínio `bing.com` aos
+    olhos do ranking — o que disparava o limite de 2 links por domínio do
+    `dedupe_and_rank` e travava a busca em só 2 resultados (todos URLs de
+    redirecionamento que não abrem direito fora de uma sessão do Bing).
+    """
+    parsed = urlparse(url)
+    if "bing.com" not in parsed.netloc or not parsed.path.startswith("/ck/a"):
+        return url
+
+    encoded = parse_qs(parsed.query).get("u")
+    if not encoded:
+        return url
+
+    value = encoded[0]
+    # O prefixo "a1" marca o esquema de codificação (base64); outros
+    # prefixos não documentados são deixados como estão.
+    if not value.startswith("a1"):
+        return url
+    value = value[2:]
+
+    padded = value + "=" * (-len(value) % 4)
+    for decoder in (base64.urlsafe_b64decode, base64.b64decode):
+        try:
+            decoded = decoder(padded).decode("utf-8")
+        except Exception:  # noqa: BLE001 — tenta o próximo esquema
+            continue
+        if decoded.startswith(("http://", "https://")):
+            return decoded
+    return url
+
+
 def normalize_url(url: str) -> str | None:
     """Valida o esquema, remove parâmetros de rastreamento e o fragmento."""
     try:
@@ -232,12 +417,13 @@ def normalize_url(url: str) -> str | None:
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         return None
 
-    kept = {
-        k: v
-        for k, v in parse_qs(parsed.query).items()
+    kept = [
+        (k, val)
+        for k, vals in sorted(parse_qs(parsed.query, keep_blank_values=True).items())
         if k.lower() not in TRACKING_PARAMS
-    }
-    query = "&".join(f"{k}={v[0]}" for k, v in sorted(kept.items()) if v)
+        for val in vals
+    ]
+    query = urlencode(kept, doseq=True)
     path = parsed.path.rstrip("/") or "/"
 
     return urlunparse((parsed.scheme, parsed.netloc.lower(), path, "", query, ""))
@@ -259,22 +445,35 @@ async def _fetch_duckduckgo_html(
     response = await client.post(
         "https://html.duckduckgo.com/html/",
         data={"q": query, "kl": settings.SCRAPER_REGION, "df": ""},
-        headers=BASE_HEADERS,
+        headers=_browser_headers(referer="https://duckduckgo.com/"),
     )
-    response.raise_for_status()
+    _raise_if_blocked("duckduckgo", response)
     soup = BeautifulSoup(response.text, "html.parser")
 
     results: list[RawResult] = []
     for position, block in enumerate(soup.select("div.result, div.web-result")):
+        # Pula blocos de anúncio
+        block_classes = " ".join(block.get("class", []))
+        if "result--ad" in block_classes or "badge--ad" in block_classes or block.select_one(".badge--ad, .result--ad"):
+            continue
+
         anchor = block.select_one("a.result__a")
         if not anchor or not anchor.get("href"):
+            continue
+
+        raw_href = str(anchor["href"])
+        if "/y.js?" in raw_href or "ad_domain=" in raw_href:
+            continue
+
+        clean_url = clean_ddg_redirect(raw_href)
+        if "/y.js?" in clean_url or "duckduckgo.com/y.js" in clean_url:
             continue
 
         snippet_el = block.select_one(".result__snippet")
         results.append(
             RawResult(
                 title=anchor.get_text(" ", strip=True),
-                url=clean_ddg_redirect(str(anchor["href"])),
+                url=clean_url,
                 snippet=snippet_el.get_text(" ", strip=True) if snippet_el else None,
                 position=position,
             )
@@ -289,16 +488,20 @@ async def _fetch_duckduckgo_lite(
     response = await client.post(
         "https://lite.duckduckgo.com/lite/",
         data={"q": query, "kl": settings.SCRAPER_REGION},
-        headers=BASE_HEADERS,
+        headers=_browser_headers(referer="https://lite.duckduckgo.com/"),
     )
-    response.raise_for_status()
+    _raise_if_blocked("duckduckgo-lite", response)
     soup = BeautifulSoup(response.text, "html.parser")
 
     results: list[RawResult] = []
     anchors = soup.select("a.result-link")
     for position, anchor in enumerate(anchors):
         href = anchor.get("href")
-        if not href:
+        if not href or "/y.js?" in str(href) or "ad_domain=" in str(href):
+            continue
+
+        clean_url = clean_ddg_redirect(str(href))
+        if "/y.js?" in clean_url or "duckduckgo.com/y.js" in clean_url:
             continue
 
         # O snippet vive em uma <tr> seguinte, na célula .result-snippet.
@@ -329,9 +532,9 @@ async def _fetch_bing(client: httpx.AsyncClient, query: str) -> list[RawResult]:
     response = await client.get(
         "https://www.bing.com/search",
         params={"q": query, "setlang": "pt-br", "cc": "BR", "count": 15},
-        headers=BASE_HEADERS,
+        headers=_browser_headers(referer="https://www.bing.com/"),
     )
-    response.raise_for_status()
+    _raise_if_blocked("bing", response)
     soup = BeautifulSoup(response.text, "html.parser")
 
     results: list[RawResult] = []
@@ -344,7 +547,7 @@ async def _fetch_bing(client: httpx.AsyncClient, query: str) -> list[RawResult]:
         results.append(
             RawResult(
                 title=anchor.get_text(" ", strip=True),
-                url=str(anchor["href"]),
+                url=clean_bing_redirect(str(anchor["href"])),
                 snippet=snippet_el.get_text(" ", strip=True) if snippet_el else None,
                 position=position,
             )
@@ -369,7 +572,7 @@ async def _fetch_wikipedia(client: httpx.AsyncClient, query: str) -> list[RawRes
             "format": "json",
             "utf8": 1,
         },
-        headers={**BASE_HEADERS, "Accept": "application/json"},
+        headers=_wikipedia_headers(),
     )
     response.raise_for_status()
     payload = response.json()
@@ -456,12 +659,14 @@ def score_result(result: RawResult, query_terms: set[str]) -> float:
 
 
 def dedupe_and_rank(
-    raw_results: Iterable[RawResult], query: str, limit: int
+    raw_results: Iterable[RawResult],
+    query: str,
+    limit: int,
+    max_per_domain: int = 2,
 ) -> list[RawResult]:
     """Normaliza, remove duplicatas, pontua e devolve os `limit` melhores."""
     query_terms = tokenize(query)
     seen_urls: set[str] = set()
-    domain_count: dict[str, int] = {}
     candidates: list[RawResult] = []
 
     for result in raw_results:
@@ -473,17 +678,16 @@ def dedupe_and_rank(
         if not title or len(title) < 3:
             continue
 
-        domain = domain_of(url)
-        # No máximo 2 links por domínio — favorece diversidade de fontes.
-        if domain_count.get(domain, 0) >= 2:
-            continue
-
         seen_urls.add(url)
-        domain_count[domain] = domain_count.get(domain, 0) + 1
 
         snippet = result.snippet
         if snippet:
             snippet = re.sub(r"\s+", " ", snippet).strip()[:600]
+
+        domain = domain_of(url)
+        # O buscador não é conteúdo de estudo; links internos/rastreamento são ignorados
+        if domain in {"duckduckgo.com", "bing.com"} or "/y.js" in url:
+            continue
 
         scored = RawResult(
             title=title[:300],
@@ -495,8 +699,24 @@ def dedupe_and_rank(
         scored.score = score_result(scored, query_terms)
         candidates.append(scored)
 
+    # Ordena todos os candidatos por relevância decrescente (desempate por posição original).
     candidates.sort(key=lambda r: (-r.score, r.position))
-    return candidates[:limit]
+
+    # Aplica o limite por domínio após a pontuação:
+    # 1. Garante os melhores links de cada domínio (não os primeiros recebidos do buscador).
+    # 2. Permite teto flexível (ex.: provedores mono-domínio como a Wikipédia podem entregar até `limit`).
+    domain_count: dict[str, int] = {}
+    selected: list[RawResult] = []
+    for candidate in candidates:
+        domain = candidate.source or domain_of(candidate.url)
+        if domain_count.get(domain, 0) >= max_per_domain:
+            continue
+        domain_count[domain] = domain_count.get(domain, 0) + 1
+        selected.append(candidate)
+        if len(selected) >= limit:
+            break
+
+    return selected
 
 
 # ---------------------------------------------------------------------------
@@ -558,18 +778,41 @@ async def search_content(
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(settings.SCRAPER_TIMEOUT),
             follow_redirects=True,
-            headers=BASE_HEADERS,
         ) as client:
-            for provider_name, fetcher in PROVIDERS:
+            providers_to_try = [
+                (name, fetcher) for name, fetcher in PROVIDERS if _health.is_available(name)
+            ]
+            if not providers_to_try:
+                # Se todos os provedores estiverem em cooldown, não abortamos a frio com 503:
+                # tentamos a Wikipédia (rede de segurança) ou o provedor com menor tempo restante.
+                best_fallback = min(
+                    PROVIDERS,
+                    key=lambda p: (
+                        0 if p[0] == "wikipedia" else 1,
+                        _health.cooldown_remaining(p[0]),
+                    ),
+                )
+                logger.warning(
+                    "Todos os provedores em cooldown. Tentando rede de segurança (%s)",
+                    best_fallback[0],
+                )
+                providers_to_try = [best_fallback]
+
+            for provider_name, fetcher in providers_to_try:
                 try:
                     raw_results = await fetcher(client, query)
                 except Exception as exc:  # noqa: BLE001 — cascata de fallback
                     logger.warning("Provedor %s falhou: %s", provider_name, exc)
                     errors.append(f"{provider_name}: {exc}")
+                    _health.record_failure(provider_name)
                     continue
 
-                ranked = dedupe_and_rank(raw_results, query, limit)
+                max_per_domain = limit if provider_name == "wikipedia" else 2
+                ranked = dedupe_and_rank(
+                    raw_results, query, limit, max_per_domain=max_per_domain
+                )
                 if ranked:
+                    _health.record_success(provider_name)
                     outcome = SearchOutcome(
                         query=query,
                         provider=provider_name,
@@ -587,6 +830,12 @@ async def search_content(
                     )
                     return outcome
 
+                # Sem resultados úteis nos buscadores de scraping é como um bloqueio
+                # "silencioso" se manifesta (ex.: DDG devolvendo página vazia com 200/202).
+                # Para a Wikipédia (API oficial), busca sem artigos é normal e não
+                # deve contar como falha do disjuntor.
+                if provider_name != "wikipedia":
+                    _health.record_failure(provider_name)
                 logger.info("Provedor %s não retornou resultados úteis", provider_name)
 
     raise SearchEngineError(

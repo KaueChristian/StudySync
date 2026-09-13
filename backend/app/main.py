@@ -14,11 +14,11 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -44,8 +44,8 @@ async def lifespan(_: FastAPI):
     """Startup e shutdown da aplicação."""
     logger.info("Iniciando %s v%s (%s)", settings.PROJECT_NAME, settings.VERSION, settings.ENV)
 
-    # Cria as tabelas caso ainda não existam (conveniência em desenvolvimento;
-    # em produção o esquema é gerenciado pelo Alembic).
+    # Aplica as migrations pendentes do Alembic (cria o banco do zero, se
+    # preciso) — o mesmo caminho em desenvolvimento e em produção.
     init_database()
 
     # O agendador roda em outra thread e precisa de uma referência ao event
@@ -151,15 +151,22 @@ async def database_exception_handler(_: Request, exc: SQLAlchemyError) -> JSONRe
 # ---------------------------------------------------------------------------
 app.include_router(api_router, prefix=settings.API_PREFIX)
 
+FRONTEND_DIR = settings.frontend_dist_dir
+if settings.FRONTEND_DIST and FRONTEND_DIR is None:
+    logger.warning(
+        "FRONTEND_DIST=%s não contém index.html; servindo só a API", settings.FRONTEND_DIST
+    )
 
-@app.get("/", tags=["Sistema"], summary="Informações da API")
-def root() -> dict:
-    return {
-        "name": settings.PROJECT_NAME,
-        "version": settings.VERSION,
-        "docs": "/docs" if not settings.is_production else None,
-        "status": "online",
-    }
+if FRONTEND_DIR is None:
+
+    @app.get("/", tags=["Sistema"], summary="Informações da API")
+    def root() -> dict:
+        return {
+            "name": settings.PROJECT_NAME,
+            "version": settings.VERSION,
+            "docs": "/docs" if not settings.is_production else None,
+            "status": "online",
+        }
 
 
 @app.get("/health", tags=["Sistema"], summary="Verificação de saúde")
@@ -172,3 +179,31 @@ def health() -> dict:
         "scheduler_running": scheduler.running,
         "websocket_connections": manager.total_connections,
     }
+
+
+# ---------------------------------------------------------------------------
+# Interface (app desktop)
+# ---------------------------------------------------------------------------
+# Registrada por último: a rota curinga não pode encobrir /api, /health e /docs.
+if FRONTEND_DIR is not None:
+    _API_ROOT = settings.API_PREFIX.strip("/")
+
+    @app.get("/{path:path}", include_in_schema=False)
+    def frontend(path: str) -> FileResponse:
+        """
+        Serve o build do Vite. Qualquer caminho que não seja arquivo real cai
+        no `index.html`, para o React Router resolver (`/agenda`, `/materias`…).
+        """
+        if path == _API_ROOT or path.startswith(f"{_API_ROOT}/"):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Rota não encontrada.")
+
+        candidate = (FRONTEND_DIR / path).resolve()
+        if path and candidate.is_file() and candidate.is_relative_to(FRONTEND_DIR):
+            # Os assets do Vite têm hash no nome: podem ficar em cache para sempre.
+            immutable = candidate.parent.name == "assets"
+            headers = {"Cache-Control": "public, max-age=31536000, immutable"} if immutable else None
+            return FileResponse(candidate, headers=headers)
+
+        # O index.html nunca é cacheado — senão uma versão nova do app
+        # continuaria abrindo com os assets antigos.
+        return FileResponse(FRONTEND_DIR / "index.html", headers={"Cache-Control": "no-cache"})

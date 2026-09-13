@@ -65,3 +65,20 @@ def normalize_tag(value: str) -> str:
     """Normaliza uma tag: sem HTML, minúscula, espaços colapsados."""
     cleaned = sanitize_text(value) or ""
     return " ".join(cleaned.lower().split())
+
+
+def strip_accents(value: str | None) -> str:
+    """Remove acentuação e converte para minúsculas para buscas e ordenação insensíveis."""
+    if not value:
+        return ""
+    import unicodedata
+
+    return "".join(
+        c for c in unicodedata.normalize("NFD", str(value))
+        if unicodedata.category(c) != "Mn"
+    ).lower()
+
+
+def escape_like(value: str) -> str:
+    """Escapa curingas da cláusula LIKE (%, _ e \\)."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")

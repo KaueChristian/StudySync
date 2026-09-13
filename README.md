@@ -1,8 +1,8 @@
 # 📚 StudySync
 
-Aplicação web completa para **gerenciar matérias, anotações e sessões de estudo**, com
-lembretes em tempo real e um motor de **busca de conteúdo de apoio na web** — sem custo
-de API externa.
+Aplicação para **gerenciar matérias, anotações e sessões de estudo**, com lembretes em
+tempo real e um motor de **busca de conteúdo de apoio na web** — sem custo de API externa.
+Roda como **app desktop no Windows** (local, sem login) ou como aplicação web.
 
 ```
 ┌──────────────────────┐   REST + WebSocket   ┌───────────────────────────┐
@@ -17,6 +17,26 @@ de API externa.
                                     │ + Alembic │              │  DDG → Bing → Wikipédia │
                                     └───────────┘              └─────────────────────────┘
 ```
+
+---
+
+## ⬇️ Download (Windows)
+
+Baixe a versão mais recente em **[Releases](https://github.com/KaueChristian/StudySync/releases/latest)**:
+
+| Arquivo | Para quem |
+|---|---|
+| `StudySync-Setup-<versão>.exe` | **Recomendado.** Instala para o seu usuário (sem pedir administrador), com atalho no Menu Iniciar e desinstalador |
+| `StudySync-<versão>-win64.zip` | Portátil: extraia a pasta `StudySync` inteira e abra o `StudySync.exe` de dentro dela |
+
+- **Sem conta nem login** — o app desktop é local e de um usuário só.
+- **Aviso "O Windows protegeu o computador":** o executável ainda não tem assinatura digital.
+  Clique em **Mais informações → Executar assim mesmo**. Os arquivos são gerados pelo
+  GitHub Actions a partir deste código; confira o hash com o `SHA256SUMS.txt` do Release
+  (`Get-FileHash .\arquivo -Algorithm SHA256`).
+- Dados em `%LOCALAPPDATA%\StudySync`, mantidos ao atualizar ou desinstalar.
+- Requer o WebView2 Runtime (já incluso no Windows 11 e na maioria das instalações do 10).
+- A busca de conteúdo usa a internet; o resto funciona offline.
 
 ---
 
@@ -42,7 +62,7 @@ de API externa.
 **Pré-requisitos:** Python ≥ 3.11 · Node.js ≥ 18 · Git
 
 ```bash
-git clone <url-do-repositorio>
+git clone https://github.com/KaueChristian/StudySync.git
 cd StudySync
 ```
 
@@ -81,20 +101,15 @@ python -c "import secrets; print(secrets.token_urlsafe(64))"
 > Em desenvolvimento a chave é opcional (uma temporária é gerada a cada boot, invalidando
 > os tokens no restart). Em `ENV=production` ela é **obrigatória**.
 
-**Crie o banco de dados** — via migrations (recomendado):
+**Banco de dados** — criado e atualizado automaticamente: ao subir, o backend aplica as
+migrations pendentes do Alembic (banco novo, banco de uma versão anterior ou banco antigo
+criado sem versão). Para fazer isso manualmente, sem subir o servidor:
 
 ```bash
-alembic upgrade head
-```
-
-<details>
-<summary>Alternativa sem Alembic</summary>
-
-```bash
-python -m app.db.init_db          # cria as tabelas
+alembic upgrade head              # aplica as migrations pendentes
+python -m app.db.init_db          # idem, e também migra bancos antigos sem versão
 python -m app.db.init_db --reset  # apaga e recria (destrutivo)
 ```
-</details>
 
 **Popule com dados de demonstração** (opcional, mas recomendado):
 
@@ -134,6 +149,43 @@ Abra **http://localhost:5173** 🎉
 > O `.env` do frontend pode ficar com os valores vazios: o Vite faz proxy de `/api`
 > (incluindo o WebSocket) para `http://127.0.0.1:8000`, evitando qualquer questão de CORS
 > em desenvolvimento.
+
+### 3️⃣ App desktop (Windows, opcional)
+
+Gera um `StudySync.exe` que roda tudo localmente — backend, banco e interface — numa janela
+nativa (WebView2, já presente no Windows 10/11), sem terminal nem navegador.
+
+```powershell
+backend\venv\Scripts\python.exe -m pip install -r desktop\requirements.txt
+pwsh desktop\build.ps1
+```
+
+Saída: `desktop\dist\StudySync\StudySync.exe` — **a pasta `StudySync\` inteira é o app** (o
+`.exe` depende da subpasta `_internal\`). Os dados do usuário ficam em
+`%LOCALAPPDATA%\StudySync` (banco, chave dos tokens, perfil do WebView2 e `studysync.log`),
+fora da pasta do app — substituir a pasta por uma versão nova preserva tudo, e o banco é
+migrado sozinho no boot.
+
+> O app desktop **não tem login**: é de um usuário só e abre direto na sua área de estudos
+> (o nome é ajustável em Configurações). Por baixo, a API continua exigindo token — ele é
+> entregue apenas à janela do app, então nenhum outro programa ou site aberto no navegador
+> consegue ler seus dados pela porta local. O modo web (`npm run dev`) continua com cadastro e
+> login.
+
+#### Publicar uma versão
+
+Instalador, zip e checksums são gerados por `desktop\release.ps1` — localmente (requer
+[Inno Setup 6](https://jrsoftware.org/isinfo.php)) ou pelo GitHub Actions
+([`.github/workflows/release.yml`](.github/workflows/release.yml)):
+
+1. Atualize a versão em `backend/app/core/config.py` (`VERSION`) **e** em
+   `frontend/package.json` — o script falha se as duas, ou a tag, não baterem.
+2. Commit, depois crie e envie a tag: `git tag v1.0.0` e `git push origin v1.0.0`.
+3. O workflow gera os arquivos e cria um **Release em rascunho** com eles e as notas de
+   `desktop/release-notes.md`. Revise no GitHub e clique em **Publish release**.
+
+Para testar o pipeline sem publicar nada: **Actions → Release desktop (Windows) → Run
+workflow** gera os mesmos arquivos como artefato do workflow.
 
 ---
 
@@ -349,7 +401,8 @@ npm run preview    # serve o build localmente
 | Sino mostra **"Reconectando…"** | O WebSocket caiu (backend reiniciado). Ele reconecta sozinho com backoff exponencial; confirme em http://localhost:8000/health. |
 | Busca retorna **503** | Sem acesso à internet ou todos os provedores bloquearam a requisição. Verifique a conexão e tente novamente. |
 | Todos os tokens caem após reiniciar o backend | `SECRET_KEY` vazia no `.env` — uma chave temporária é gerada a cada boot. Defina uma chave fixa. |
-| `no such table: users` | Banco não inicializado. Rode `alembic upgrade head` em `backend/`. |
+| `no such table: users` | Banco não inicializado. Rode `python -m app.db.init_db` em `backend/` (o backend também faz isso ao subir). |
+| `table users already exists` ao rodar `alembic upgrade head` | Banco criado sem registro de versão por uma versão antiga do projeto. Rode `python -m app.db.init_db`, que carimba a revisão equivalente e aplica o restante. |
 | Lembretes não disparam | O agendador não subiu. Cheque `scheduler_running` em `/health` e evite `--reload` em produção (ele duplicaria o processo e o agendador). |
 | Porta 5173 ou 8000 ocupada | Use `python run.py --port 9000` ou ajuste `server.port` em `frontend/vite.config.js`. |
 

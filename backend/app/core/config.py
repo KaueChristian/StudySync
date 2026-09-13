@@ -61,6 +61,12 @@ class Settings(BaseSettings):
     SCRAPER_MAX_RESULTS: int = 5
     SCRAPER_REGION: str = "br-pt"
 
+    # ------------------------------------------------------------ frontend
+    # Pasta do build do Vite (`frontend/dist`). Vazio = API pura (desenvolvimento,
+    # com o Vite servindo a interface). Preenchido pelo app desktop, que serve
+    # interface e API pela mesma origem.
+    FRONTEND_DIST: str = ""
+
     # ------------------------------------------------------------ validação
     @field_validator("ENV")
     @classmethod
@@ -100,6 +106,14 @@ class Settings(BaseSettings):
                 absolute = (BASE_DIR / raw_path.lstrip("./")).resolve()
                 return f"{prefix}{absolute.as_posix()}"
         return url
+
+    @property
+    def frontend_dist_dir(self) -> Path | None:
+        """Pasta do build do frontend, se configurada e com `index.html`."""
+        if not self.FRONTEND_DIST:
+            return None
+        path = Path(self.FRONTEND_DIST).resolve()
+        return path if (path / "index.html").is_file() else None
 
 
 @lru_cache

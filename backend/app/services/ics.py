@@ -18,8 +18,9 @@ _PRODID = "-//StudySync//Agenda de Estudos//PT-BR"
 
 def _escape(text: str) -> str:
     """Escapa os caracteres especiais do formato (RFC 5545 §3.3.11)."""
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
     return (
-        text.replace("\\", "\\\\")
+        normalized.replace("\\", "\\\\")
         .replace(";", "\\;")
         .replace(",", "\\,")
         .replace("\n", "\\n")

@@ -25,8 +25,6 @@ from sqlalchemy.exc import IntegrityError
 from app.core.deps import CurrentUser, DbSession
 from app.core.rate_limit import auth_limiter, client_ip, enforce_auth_rate_limit
 from app.core.security import (
-    create_access_token,
-    create_refresh_token,
     decode_token,
     hash_password,
     hash_token,
@@ -42,6 +40,7 @@ from app.schemas.auth import (
 )
 from app.schemas.common import Message
 from app.schemas.user import PasswordChange, UserCreate, UserRead, UserUpdate
+from app.services.sessions import issue_token_pair
 
 logger = logging.getLogger("studysync.auth")
 
@@ -54,29 +53,12 @@ RateLimited = Annotated[None, Depends(enforce_auth_rate_limit)]
 # Helpers
 # ---------------------------------------------------------------------------
 def _issue_token_pair(db: DbSession, user: User, request: Request) -> TokenPair:
-    """Emite access + refresh e registra o refresh para permitir revogação."""
-    access_token, expires_at = create_access_token(
-        user.id, extra_claims={"email": user.email}
-    )
-    refresh_token, jti, refresh_expires = create_refresh_token(user.id)
-
-    db.add(
-        RefreshToken(
-            user_id=user.id,
-            jti=jti,
-            token_hash=hash_token(refresh_token),
-            expires_at=refresh_expires,
-            user_agent=(request.headers.get("user-agent") or "")[:255] or None,
-            ip_address=client_ip(request)[:64],
-        )
-    )
-    db.commit()
-
-    return TokenPair(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        expires_at=expires_at,
-        user=UserRead.model_validate(user),
+    """Emite o par de tokens registrando o navegador e o IP da requisição."""
+    return issue_token_pair(
+        db,
+        user,
+        user_agent=request.headers.get("user-agent"),
+        ip_address=client_ip(request),
     )
 
 

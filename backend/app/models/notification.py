@@ -36,8 +36,9 @@ class Notification(Base):
     message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Referência opcional ao agendamento que originou o lembrete.
-    # Sem FK: a notificação sobrevive à exclusão do agendamento.
-    schedule_id: Mapped[int | None] = mapped_column(nullable=True)
+    schedule_id: Mapped[int | None] = mapped_column(
+        ForeignKey("schedules.id", ondelete="SET NULL"), nullable=True
+    )
 
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter
 from sqlalchemy import func, select
@@ -25,7 +26,7 @@ from app.schemas.schedule import ScheduleRead
 
 router = APIRouter()
 
-_MARKDOWN_NOISE = re.compile(r"(```.*?```|`[^`]*`|[*_>#\[\]()!-]|\r)", re.DOTALL)
+_MARKDOWN_NOISE = re.compile(r"(```.*?```|`[^`]*`|[*_>#\[\]()!|~-]|\r)", re.DOTALL)
 
 
 def _excerpt(content: str, length: int = 140) -> str:
@@ -44,9 +45,22 @@ def get_dashboard(current_user: CurrentUser, db: DbSession) -> DashboardResponse
     """
     user_id = current_user.id
     now = datetime.now(timezone.utc)
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    today_end = today_start + timedelta(days=1)
-    week_start = today_start - timedelta(days=6)
+
+    try:
+        user_tz = ZoneInfo(current_user.timezone or "America/Sao_Paulo")
+    except Exception:
+        user_tz = timezone.utc
+
+    # "Hoje" e janela da semana calculados no fuso horário local do usuário
+    now_local = now.astimezone(user_tz)
+    today_start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end_local = today_start_local + timedelta(days=1)
+
+    today_start = today_start_local.astimezone(timezone.utc)
+    today_end = today_end_local.astimezone(timezone.utc)
+
+    week_start_local = today_start_local - timedelta(days=6)
+    week_start = week_start_local.astimezone(timezone.utc)
 
     # ------------------------------------------------------------ contadores
     subjects_count = db.scalar(
@@ -59,6 +73,19 @@ def get_dashboard(current_user: CurrentUser, db: DbSession) -> DashboardResponse
         select(func.count(SearchResult.id)).where(SearchResult.owner_id == user_id)
     ) or 0
 
+    sessions_pending = db.scalar(
+        select(func.count(Schedule.id)).where(
+            Schedule.owner_id == user_id,
+            Schedule.status == ScheduleStatus.PENDING,
+        )
+    ) or 0
+    sessions_overdue = db.scalar(
+        select(func.count(Schedule.id)).where(
+            Schedule.owner_id == user_id,
+            Schedule.status == ScheduleStatus.PENDING,
+            Schedule.end_at < now,
+        )
+    ) or 0
     sessions_upcoming = db.scalar(
         select(func.count(Schedule.id)).where(
             Schedule.owner_id == user_id,
@@ -171,13 +198,14 @@ def get_dashboard(current_user: CurrentUser, db: DbSession) -> DashboardResponse
     ).all()
 
     buckets: dict[str, int] = {
-        (week_start + timedelta(days=offset)).date().isoformat(): 0
+        (week_start_local + timedelta(days=offset)).date().isoformat(): 0
         for offset in range(7)
     }
     for session in completed_week:
         start = ensure_utc(session.start_at)
         if start:
-            key = start.date().isoformat()
+            # Agrupa os dias conforme o fuso local do usuário
+            key = start.astimezone(user_tz).date().isoformat()
             if key in buckets:
                 buckets[key] += 1
 
@@ -190,6 +218,8 @@ def get_dashboard(current_user: CurrentUser, db: DbSession) -> DashboardResponse
             subjects=subjects_count,
             notes=notes_count,
             saved_links=links_count,
+            sessions_pending=sessions_pending,
+            sessions_overdue=sessions_overdue,
             sessions_upcoming=sessions_upcoming,
             sessions_completed=sessions_completed,
             sessions_today=sessions_today,

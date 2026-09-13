@@ -1,5 +1,5 @@
 /** Cartão de uma sessão de estudo, usado na agenda e no painel. */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Bell,
   BellOff,
@@ -31,12 +31,21 @@ export default function ScheduleCard({
   compact = false,
 }) {
   const [timerOpen, setTimerOpen] = useState(false)
+  const [now, setNow] = useState(() => Date.now())
 
   const status = SCHEDULE_STATUS[schedule.status] ?? SCHEDULE_STATUS.pending
   const start = toDate(schedule.start_at)
-  const isPast = start && start < new Date()
+  const isPast = start ? start.getTime() <= now : false
   const isPending = schedule.status === 'pending'
   const linksCount = schedule.search_results?.length ?? 0
+
+  useEffect(() => {
+    if (!isPending || isPast || !start) return
+    const diff = start.getTime() - now
+    const intervalMs = diff < 120_000 ? 5_000 : 30_000
+    const timer = setInterval(() => setNow(Date.now()), intervalMs)
+    return () => clearInterval(timer)
+  }, [isPending, isPast, start, now])
 
   const completeFromTimer = () => {
     setTimerOpen(false)

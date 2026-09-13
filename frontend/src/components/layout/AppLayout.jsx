@@ -5,6 +5,7 @@ import { ChevronDown, LogOut, Menu, Moon, Settings, Sun, User } from 'lucide-rea
 
 import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/context/ThemeContext'
+import { IS_DESKTOP } from '@/lib/desktop'
 import { initials } from '@/lib/format'
 import NotificationBell from './NotificationBell'
 import Sidebar from './Sidebar'
@@ -51,7 +52,8 @@ function UserMenu() {
         <div className="card animate-scale-in absolute right-0 z-50 mt-2 w-60 origin-top-right overflow-hidden shadow-xl">
           <div className="border-b border-[var(--border)] px-4 py-3">
             <p className="truncate text-sm font-semibold">{user?.name}</p>
-            <p className="text-muted truncate text-xs">{user?.email}</p>
+            {/* No desktop o e-mail é interno do usuário local, não de acesso. */}
+            {!IS_DESKTOP && <p className="text-muted truncate text-xs">{user?.email}</p>}
           </div>
 
           <div className="p-1.5">
@@ -63,14 +65,16 @@ function UserMenu() {
               <Settings className="h-4 w-4" aria-hidden />
               Configurações
             </Link>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
-            >
-              <LogOut className="h-4 w-4" aria-hidden />
-              Sair da conta
-            </button>
+            {!IS_DESKTOP && (
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+              >
+                <LogOut className="h-4 w-4" aria-hidden />
+                Sair da conta
+              </button>
+            )}
           </div>
         </div>
       )}

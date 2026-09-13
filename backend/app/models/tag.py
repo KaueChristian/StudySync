@@ -38,7 +38,7 @@ class Tag(Base):
     )
 
     notes: Mapped[list["Note"]] = relationship(
-        secondary="note_tags", back_populates="tags"
+        secondary="note_tags", back_populates="tags", passive_deletes=True
     )
 
     def __repr__(self) -> str:  # pragma: no cover

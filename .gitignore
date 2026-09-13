@@ -43,6 +43,11 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# ---------- Empacotamento desktop (PyInstaller) ----------
+desktop/build/
+desktop/dist/
+desktop/release/
+
 # ---------- Editores / SO ----------
 .vscode/*
 !.vscode/extensions.json

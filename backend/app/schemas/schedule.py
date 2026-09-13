@@ -127,7 +127,7 @@ class ScheduleUpdate(BaseModel):
     @classmethod
     def _clean_title(cls, value: str | None) -> str | None:
         if value is None:
-            return None
+            raise ValueError("O título não pode ser nulo.")
         cleaned = sanitize_text(value)
         if not cleaned:
             raise ValueError("O título não pode ficar vazio.")
@@ -138,17 +138,53 @@ class ScheduleUpdate(BaseModel):
     def _clean_text(cls, value: str | None) -> str | None:
         return sanitize_text(value) or None
 
-    @field_validator("start_at", "end_at")
+    @field_validator("start_at")
     @classmethod
-    def _normalize_datetime(cls, value: datetime | None) -> datetime | None:
-        return _to_utc(value) if value else None
+    def _clean_start_at(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            raise ValueError("O horário de início não pode ser nulo.")
+        return _to_utc(value)
+
+    @field_validator("end_at")
+    @classmethod
+    def _clean_end_at(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            raise ValueError("O horário de término não pode ser nulo.")
+        return _to_utc(value)
+
+    @field_validator("remind_minutes")
+    @classmethod
+    def _clean_remind_minutes(cls, value: int | None) -> int | None:
+        if value is None:
+            raise ValueError("A antecedência do lembrete não pode ser nula.")
+        return value
+
+    @field_validator("reminder_enabled")
+    @classmethod
+    def _clean_reminder_enabled(cls, value: bool | None) -> bool | None:
+        if value is None:
+            raise ValueError("O lembrete ativo não pode ser nulo.")
+        return value
+
+    @field_validator("status")
+    @classmethod
+    def _clean_status(cls, value: ScheduleStatus | None) -> ScheduleStatus | None:
+        if value is None:
+            raise ValueError("O status não pode ser nulo.")
+        return value
 
     @model_validator(mode="after")
     def _check_interval(self) -> "ScheduleUpdate":
         # A validação cruzada completa (contra os valores já persistidos)
-        # acontece na rota; aqui só rejeitamos o caso obviamente inválido.
-        if self.start_at and self.end_at and self.end_at <= self.start_at:
-            raise ValueError("O horário de término deve ser posterior ao de início.")
+        # acontece na rota; aqui rejeitamos casos inválidos no payload.
+        if self.start_at and self.end_at:
+            if self.end_at <= self.start_at:
+                raise ValueError("O horário de término deve ser posterior ao de início.")
+            duration = (self.end_at - self.start_at).total_seconds() / 3600
+            if duration > MAX_DURATION_HOURS:
+                raise ValueError(
+                    f"A sessão não pode ultrapassar {MAX_DURATION_HOURS} horas."
+                )
         return self
 
 

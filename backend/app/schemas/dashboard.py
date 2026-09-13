@@ -14,7 +14,9 @@ class DashboardStats(BaseModel):
     subjects: int
     notes: int
     saved_links: int
-    sessions_upcoming: int
+    sessions_pending: int = 0
+    sessions_overdue: int = 0
+    sessions_upcoming: int = 0
     sessions_completed: int
     sessions_today: int
     minutes_scheduled_week: int

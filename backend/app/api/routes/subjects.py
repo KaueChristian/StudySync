@@ -14,6 +14,7 @@ from app.models.schedule import Schedule
 from app.models.subject import Subject
 from app.schemas.common import Message
 from app.schemas.subject import SubjectCreate, SubjectRead, SubjectUpdate
+from app.services.tags import cleanup_orphan_tags
 
 router = APIRouter()
 
@@ -94,6 +95,19 @@ def list_subjects(current_user: CurrentUser, db: DbSession) -> list[SubjectRead]
 def create_subject(
     payload: SubjectCreate, current_user: CurrentUser, db: DbSession
 ) -> SubjectRead:
+    # Unicidade insensível a maiúsculas/minúsculas
+    existing = db.scalar(
+        select(Subject.id).where(
+            Subject.owner_id == current_user.id,
+            func.lower(Subject.name) == payload.name.strip().lower(),
+        )
+    )
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Você já tem uma matéria com esse nome.",
+        )
+
     subject = Subject(owner_id=current_user.id, **payload.model_dump())
     db.add(subject)
     try:
@@ -125,7 +139,22 @@ def update_subject(
 ) -> SubjectRead:
     subject = get_owned_subject(db, current_user.id, subject_id)
 
-    for field, value in payload.model_dump(exclude_unset=True, exclude_none=True).items():
+    updates = payload.model_dump(exclude_unset=True, exclude_none=True)
+    if "name" in updates:
+        existing = db.scalar(
+            select(Subject.id).where(
+                Subject.owner_id == current_user.id,
+                Subject.id != subject_id,
+                func.lower(Subject.name) == updates["name"].strip().lower(),
+            )
+        )
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Você já tem uma matéria com esse nome.",
+            )
+
+    for field, value in updates.items():
         setattr(subject, field, value)
     subject.updated_at = datetime.now(timezone.utc)
 
@@ -154,5 +183,8 @@ def delete_subject(
     """
     subject = get_owned_subject(db, current_user.id, subject_id)
     db.delete(subject)
+    db.commit()
+
+    cleanup_orphan_tags(db, current_user.id)
     db.commit()
     return Message(detail="Matéria excluída com sucesso.")

@@ -143,7 +143,9 @@ export function initials(name = '') {
 /** Corta o texto preservando palavras inteiras. */
 export function truncate(text = '', max = 120) {
   if (text.length <= max) return text
-  return `${text.slice(0, text.lastIndexOf(' ', max) || max)}…`
+  const lastSpace = text.lastIndexOf(' ', max)
+  const cutIndex = lastSpace > 0 ? lastSpace : max
+  return `${text.slice(0, cutIndex)}…`
 }
 
 /** Domínio legível de uma URL. */

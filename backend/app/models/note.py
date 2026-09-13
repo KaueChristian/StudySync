@@ -83,7 +83,10 @@ class Note(Base):
     owner: Mapped["User"] = relationship(back_populates="notes")
     subject: Mapped["Subject | None"] = relationship(back_populates="notes")
     tags: Mapped[list["Tag"]] = relationship(
-        secondary=note_tags, back_populates="notes", lazy="selectin"
+        secondary=note_tags,
+        back_populates="notes",
+        lazy="selectin",
+        passive_deletes=True,
     )
     search_results: Mapped[list["SearchResult"]] = relationship(
         back_populates="note",

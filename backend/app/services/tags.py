@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.core.sanitize import normalize_tag
@@ -52,9 +52,9 @@ def cleanup_orphan_tags(db: Session, owner_id: int) -> int:
     Chamado após edições/exclusões para que a nuvem de tags não acumule
     entradas mortas.
     """
-    orphans = db.scalars(
-        select(Tag).where(Tag.owner_id == owner_id, ~Tag.notes.any())
+    orphan_ids = db.scalars(
+        select(Tag.id).where(Tag.owner_id == owner_id, ~Tag.notes.any())
     ).all()
-    for tag in orphans:
-        db.delete(tag)
-    return len(orphans)
+    if orphan_ids:
+        db.execute(delete(Tag).where(Tag.id.in_(orphan_ids)))
+    return len(orphan_ids)

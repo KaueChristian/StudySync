@@ -80,7 +80,7 @@ class NoteUpdate(BaseModel):
     @classmethod
     def _clean_title(cls, value: str | None) -> str | None:
         if value is None:
-            return None
+            raise ValueError("O título não pode ser nulo.")
         cleaned = sanitize_text(value)
         if not cleaned:
             raise ValueError("O título não pode ficar vazio.")
@@ -90,8 +90,15 @@ class NoteUpdate(BaseModel):
     @classmethod
     def _clean_content(cls, value: str | None) -> str | None:
         if value is None:
-            return None
+            raise ValueError("O conteúdo não pode ser nulo.")
         return sanitize_html(value) or ""
+
+    @field_validator("is_pinned")
+    @classmethod
+    def _clean_pinned(cls, value: bool | None) -> bool | None:
+        if value is None:
+            raise ValueError("O campo fixado não pode ser nulo.")
+        return value
 
     @field_validator("category")
     @classmethod

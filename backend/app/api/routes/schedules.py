@@ -8,15 +8,17 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 
 from app.core.deps import CurrentUser, DbSession, UserFromIcsToken
 from app.db.base import ensure_utc
+from app.models.notification import Notification
 from app.models.schedule import Schedule, ScheduleStatus
 from app.models.subject import Subject
 from app.schemas.common import Message
 from app.schemas.schedule import (
+    MAX_DURATION_HOURS,
     IcsTokenRead,
     ScheduleCreate,
     ScheduleRead,
@@ -290,11 +292,18 @@ def update_schedule(
     # só `start_at`, e o novo início precisa continuar antes do fim gravado.
     start_at = ensure_utc(schedule.start_at)
     end_at = ensure_utc(schedule.end_at)
-    if start_at and end_at and end_at <= start_at:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="O horário de término deve ser posterior ao de início.",
-        )
+    if start_at and end_at:
+        if end_at <= start_at:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="O horário de término deve ser posterior ao de início.",
+            )
+        duration = (end_at - start_at).total_seconds() / 3600
+        if duration > MAX_DURATION_HOURS:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"A sessão não pode ultrapassar {MAX_DURATION_HOURS} horas.",
+            )
 
     if REMINDER_FIELDS & data.keys():
         schedule.remind_at = compute_remind_at(
@@ -352,6 +361,11 @@ def delete_schedule(
     schedule = get_owned_schedule(db, current_user.id, schedule_id)
 
     if scope == "this" or schedule.recurrence_group_id is None:
+        db.execute(
+            update(Notification)
+            .where(Notification.schedule_id == schedule.id)
+            .values(schedule_id=None)
+        )
         db.delete(schedule)
         db.commit()
         return Message(detail="Agendamento excluído com sucesso.")
@@ -365,6 +379,13 @@ def delete_schedule(
 
     group = db.scalars(query).all()
     count = len(group)
+    ids = [item.id for item in group]
+    if ids:
+        db.execute(
+            update(Notification)
+            .where(Notification.schedule_id.in_(ids))
+            .values(schedule_id=None)
+        )
     for item in group:
         db.delete(item)
     db.commit()

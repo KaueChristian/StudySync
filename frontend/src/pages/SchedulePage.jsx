@@ -1,7 +1,7 @@
 /** Agenda: calendário mensal + lista de sessões do dia selecionado. */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { addMonths, endOfMonth, isSameDay, startOfMonth } from 'date-fns'
+import { addMonths, endOfMonth, isSameDay, isSameMonth, startOfMonth } from 'date-fns'
 import { CalendarDays, CalendarPlus, Download, ListFilter } from 'lucide-react'
 
 import CalendarMonth from '@/components/schedule/CalendarMonth'
@@ -65,7 +65,9 @@ export default function SchedulePage() {
 
   // Abre automaticamente a sessão indicada por uma notificação.
   useEffect(() => {
-    if (!focusId || !schedules.length) return
+    if (!focusId) return
+    if (loading) return
+
     const target = schedules.find((item) => String(item.id) === focusId)
     if (target) {
       const date = toDate(target.start_at)
@@ -75,15 +77,40 @@ export default function SchedulePage() {
       }
       setEditing(target)
       setModalOpen(true)
+    } else {
+      scheduleService
+        .get(focusId)
+        .then((fetched) => {
+          const date = toDate(fetched.start_at)
+          if (date) {
+            setSelectedDate(date)
+            setMonth(startOfMonth(date))
+          }
+          setEditing(fetched)
+          setModalOpen(true)
+        })
+        .catch(() => {
+          toast.warning('A sessão associada a este lembrete não foi encontrada ou foi excluída.')
+        })
     }
+
     setSearchParams((current) => {
       const next = new URLSearchParams(current)
       next.delete('sessao')
       return next
     })
-  }, [focusId, schedules, setSearchParams])
+  }, [focusId, schedules, loading, setSearchParams, toast])
 
   // ------------------------------------------------------------- derivados
+  const monthSchedules = useMemo(
+    () =>
+      schedules.filter((schedule) => {
+        const date = toDate(schedule.start_at)
+        return date && isSameMonth(date, month)
+      }),
+    [schedules, month],
+  )
+
   const daySchedules = useMemo(
     () =>
       schedules
@@ -233,9 +260,9 @@ export default function SchedulePage() {
             <h3 className="mb-2.5 text-sm font-semibold">Resumo do mês</h3>
             <dl className="space-y-2 text-sm">
               {[
-                ['Total de sessões', schedules.length],
-                ['Pendentes', schedules.filter((s) => s.status === 'pending').length],
-                ['Concluídas', schedules.filter((s) => s.status === 'completed').length],
+                ['Total de sessões', monthSchedules.length],
+                ['Pendentes', monthSchedules.filter((s) => s.status === 'pending').length],
+                ['Concluídas', monthSchedules.filter((s) => s.status === 'completed').length],
               ].map(([label, value]) => (
                 <div key={label} className="flex items-center justify-between">
                   <dt className="text-muted">{label}</dt>

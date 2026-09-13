@@ -21,7 +21,8 @@ import { useAuth } from '@/context/AuthContext'
 import { useNotifications } from '@/context/NotificationContext'
 import { useTheme } from '@/context/ThemeContext'
 import { useToast } from '@/context/ToastContext'
-import { apiUrl, getErrorMessage } from '@/lib/api'
+import { absoluteApiUrl, getErrorMessage } from '@/lib/api'
+import { IS_DESKTOP } from '@/lib/desktop'
 import { authService, scheduleService } from '@/lib/services'
 import { REMINDER_OPTIONS } from '@/lib/constants'
 import { formatDate } from '@/lib/format'
@@ -142,7 +143,7 @@ export default function SettingsPage() {
     setLoadingLink(true)
     try {
       const { token } = await scheduleService.getExportToken()
-      setSubscribeUrl(`${apiUrl('/schedules/export.ics')}?token=${token}`)
+      setSubscribeUrl(`${absoluteApiUrl('/schedules/export.ics')}?token=${token}`)
     } catch (err) {
       toast.error(getErrorMessage(err, 'Não foi possível gerar o link.'))
     } finally {
@@ -176,7 +177,9 @@ export default function SettingsPage() {
       <PageHeading
         icon={Settings}
         title="Configurações"
-        description="Ajuste seu perfil, preferências e segurança."
+        description={
+          IS_DESKTOP ? 'Ajuste seu perfil e preferências.' : 'Ajuste seu perfil, preferências e segurança.'
+        }
       />
 
       <div className="grid max-w-3xl gap-5">
@@ -192,13 +195,16 @@ export default function SettingsPage() {
               required
             />
 
-            <Input
-              label="E-mail"
-              value={user?.email ?? ''}
-              hint="O e-mail de acesso não pode ser alterado."
-              disabled
-              readOnly
-            />
+            {/* Desktop não tem login: e-mail e senha não fazem sentido ali. */}
+            {!IS_DESKTOP && (
+              <Input
+                label="E-mail"
+                value={user?.email ?? ''}
+                hint="O e-mail de acesso não pode ser alterado."
+                disabled
+                readOnly
+              />
+            )}
 
             <div className="grid gap-4 sm:grid-cols-2">
               <Select
@@ -352,54 +358,56 @@ export default function SettingsPage() {
         </Section>
 
         {/* ---------------------------------------------------------- senha */}
-        <Section
-          icon={KeyRound}
-          title="Segurança"
-          description="Alterar a senha encerra as sessões nos outros dispositivos."
-        >
-          <form onSubmit={changePassword} className="space-y-4">
-            <Input
-              label="Senha atual"
-              type="password"
-              autoComplete="current-password"
-              value={passwords.current}
-              onChange={(event) => setPasswords((c) => ({ ...c, current: event.target.value }))}
-              required
-            />
-
-            <div className="grid gap-4 sm:grid-cols-2">
+        {!IS_DESKTOP && (
+          <Section
+            icon={KeyRound}
+            title="Segurança"
+            description="Alterar a senha encerra as sessões nos outros dispositivos."
+          >
+            <form onSubmit={changePassword} className="space-y-4">
               <Input
-                label="Nova senha"
+                label="Senha atual"
                 type="password"
-                autoComplete="new-password"
-                hint="Mínimo de 8 caracteres, com letra e número."
-                value={passwords.next}
-                onChange={(event) => setPasswords((c) => ({ ...c, next: event.target.value }))}
+                autoComplete="current-password"
+                value={passwords.current}
+                onChange={(event) => setPasswords((c) => ({ ...c, current: event.target.value }))}
                 required
               />
-              <Input
-                label="Confirmar nova senha"
-                type="password"
-                autoComplete="new-password"
-                value={passwords.confirm}
-                onChange={(event) => setPasswords((c) => ({ ...c, confirm: event.target.value }))}
-                required
-              />
-            </div>
 
-            {passwordError && (
-              <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-                {passwordError}
-              </p>
-            )}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Input
+                  label="Nova senha"
+                  type="password"
+                  autoComplete="new-password"
+                  hint="Mínimo de 8 caracteres, com letra e número."
+                  value={passwords.next}
+                  onChange={(event) => setPasswords((c) => ({ ...c, next: event.target.value }))}
+                  required
+                />
+                <Input
+                  label="Confirmar nova senha"
+                  type="password"
+                  autoComplete="new-password"
+                  value={passwords.confirm}
+                  onChange={(event) => setPasswords((c) => ({ ...c, confirm: event.target.value }))}
+                  required
+                />
+              </div>
 
-            <div className="flex justify-end border-t border-[var(--border)] pt-4">
-              <Button type="submit" loading={savingPassword}>
-                Alterar senha
-              </Button>
-            </div>
-          </form>
-        </Section>
+              {passwordError && (
+                <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+                  {passwordError}
+                </p>
+              )}
+
+              <div className="flex justify-end border-t border-[var(--border)] pt-4">
+                <Button type="submit" loading={savingPassword}>
+                  Alterar senha
+                </Button>
+              </div>
+            </form>
+          </Section>
+        )}
       </div>
     </>
   )

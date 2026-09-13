@@ -1,0 +1,13 @@
+# ============================================================================
+# StudySync - Dependências do empacotamento desktop (só para gerar o .exe)
+# Instale no mesmo venv do backend:
+#   backend\venv\Scripts\python.exe -m pip install -r desktop\requirements.txt
+# ============================================================================
+-r ../backend/requirements.txt
+
+# Janela nativa (WebView2 no Windows) — pythonnet >= 3.1 é o primeiro com Python 3.14
+pywebview>=6.2
+pythonnet>=3.1.0
+
+# Gerador do executável
+pyinstaller>=6.22

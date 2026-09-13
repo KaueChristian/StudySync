@@ -7,12 +7,22 @@ from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
+from zoneinfo import available_timezones
+
 from app.core.sanitize import sanitize_text
 from app.schemas.common import ORMModel
 
 # Pelo menos uma letra e um número; comprimento validado à parte.
 _HAS_LETTER = re.compile(r"[A-Za-z]")
 _HAS_DIGIT = re.compile(r"\d")
+
+
+def validate_timezone_name(value: str) -> str:
+    """Valida se a string corresponde a um fuso IANA reconhecido ou UTC."""
+    tz = value.strip()
+    if tz not in available_timezones() and tz.upper() != "UTC":
+        raise ValueError("Fuso horário inválido. Informe um fuso IANA (ex.: 'America/Sao_Paulo' ou 'UTC').")
+    return tz
 
 
 def validate_password_strength(value: str) -> str:
@@ -57,6 +67,11 @@ class UserCreate(UserBase):
     def _check_password(cls, value: str) -> str:
         return validate_password_strength(value)
 
+    @field_validator("timezone")
+    @classmethod
+    def _check_timezone(cls, value: str) -> str:
+        return validate_timezone_name(value)
+
 
 class UserUpdate(BaseModel):
     """Atualização parcial do perfil."""
@@ -69,11 +84,25 @@ class UserUpdate(BaseModel):
     @classmethod
     def _clean_name(cls, value: str | None) -> str | None:
         if value is None:
-            return None
+            raise ValueError("O nome não pode ser nulo.")
         cleaned = sanitize_text(value)
         if not cleaned or len(cleaned) < 2:
             raise ValueError("Nome inválido.")
         return cleaned
+
+    @field_validator("timezone")
+    @classmethod
+    def _check_timezone(cls, value: str | None) -> str | None:
+        if value is None:
+            raise ValueError("O fuso horário não pode ser nulo.")
+        return validate_timezone_name(value)
+
+    @field_validator("default_reminder_minutes")
+    @classmethod
+    def _check_default_reminder_minutes(cls, value: int | None) -> int | None:
+        if value is None:
+            raise ValueError("A antecedência do lembrete não pode ser nula.")
+        return value
 
 
 class PasswordChange(BaseModel):
