@@ -146,8 +146,11 @@ Saída: `desktop\dist\StudySync\StudySync.exe` — **a pasta `StudySync\` inteir
 fora da pasta do app — substituir a pasta por uma versão nova preserva tudo, e o banco é
 migrado sozinho no boot.
 
-> O app desktop começa sem contas: crie a sua pela tela de cadastro. A conta demo só existe
-> onde `python -m app.seed` foi rodado.
+> O app desktop **não tem login**: é de um usuário só e abre direto na sua área de estudos
+> (o nome é ajustável em Configurações). Por baixo, a API continua exigindo token — ele é
+> entregue apenas à janela do app, então nenhum outro programa ou site aberto no navegador
+> consegue ler seus dados pela porta local. O modo web (`npm run dev`) continua com cadastro e
+> login.
 
 ---
 

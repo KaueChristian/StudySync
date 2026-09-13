@@ -3,10 +3,12 @@
  *
  * Mantém o usuário atual, expõe as ações de login/cadastro/logout e restaura
  * a sessão ao recarregar a página (validando o token contra `/auth/me`).
+ * No app desktop não há login: sem token, a sessão vem da ponte do pywebview.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 
 import { getErrorMessage, setSessionExpiredHandler, tokenStore } from '@/lib/api'
+import { IS_DESKTOP, requestLocalSession } from '@/lib/desktop'
 import { authService } from '@/lib/services'
 
 const AuthContext = createContext(null)
@@ -23,13 +25,16 @@ export function AuthProvider({ children }) {
     let active = true
 
     async function restore() {
-      if (!tokenStore.access) {
-        if (active) setLoading(false)
-        return
-      }
       try {
-        const profile = await authService.me()
-        if (active) setUser(profile)
+        if (tokenStore.access) {
+          // Com token vencido, o interceptor renova (no desktop, até pela ponte).
+          const profile = await authService.me()
+          if (active) setUser(profile)
+        } else if (IS_DESKTOP) {
+          const data = await requestLocalSession()
+          tokenStore.save(data)
+          if (active) setUser(data.user)
+        }
       } catch {
         // O interceptor já tentou renovar; chegar aqui significa sessão morta.
         tokenStore.clear()

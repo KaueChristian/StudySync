@@ -16,12 +16,18 @@ $root = Split-Path -Parent $PSScriptRoot
 $python = Join-Path $root 'backend\venv\Scripts\python.exe'
 if (-not (Test-Path $python)) { throw "venv do backend não encontrado em $python" }
 
-Write-Host '==> Build do frontend' -ForegroundColor Cyan
+Write-Host '==> Build do frontend (modo desktop, sem login)' -ForegroundColor Cyan
 Push-Location (Join-Path $root 'frontend')
+# Restaurado no finally: o script pode rodar na mesma sessão do terminal.
+$previousDesktopFlag = $env:VITE_DESKTOP
+$env:VITE_DESKTOP = 'true'
 try {
     npm run build
     if ($LASTEXITCODE -ne 0) { throw 'npm run build falhou' }
-} finally { Pop-Location }
+} finally {
+    $env:VITE_DESKTOP = $previousDesktopFlag
+    Pop-Location
+}
 
 Write-Host '==> Empacotamento com PyInstaller' -ForegroundColor Cyan
 & $python -m PyInstaller (Join-Path $PSScriptRoot 'StudySync.spec') `

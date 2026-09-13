@@ -211,6 +211,11 @@ durante o teste para inspecionar a janela real.
 | Caminho de falha: porta 8765 ocupada | ✅ | Com outro programa escutando na 8765, o app subiu na 53125, registrou o aviso no log e abriu a janela normalmente; ao fechar, as duas portas ficaram livres |
 | Regressão do modo de desenvolvimento | ✅ | Sem `FRONTEND_DIST`, `/` continua devolvendo o JSON da API, `/docs` 200 e `/agenda` 404; com `FRONTEND_DIST` inválido, idem, com aviso no log. `npm run lint`: 0 erros (os mesmos 8 avisos); `npm run build` OK |
 | Rotas no modo desktop | ✅ | `/` e `/agenda` → `index.html` com `Cache-Control: no-cache`; `/assets/*.js` → `max-age=31536000, immutable`; `/api/nao-existe` → 404 JSON (não cai no `index.html`); `/api/auth/me` sem token → 401; caminho com `..%2f` → `index.html`, nunca arquivo fora do build |
+| **Modo local sem login** (decisão em §7) — pasta de dados vazia | ✅ | Primeira abertura foi direto ao painel ("Boa noite, Estudante!"), token entregue pela ponte; usuário local criado com `local@example.com` / fuso `America/Sao_Paulo` (o do Windows). Menu do usuário sem "Sair" e sem e-mail; `/login` e `/cadastro` redirecionam para `/`; Configurações sem e-mail e sem "Segurança" |
+| Modo local — roteiro de fumaça | ✅ | Matéria 201; sessão com lembrete 201 e o lembrete chegou ao sino da janela ("Notificações (1 não lida)"); busca "ligações químicas" com 5 links reais (todamateria, brasilescola, manualdaquimica, aprovatotal, estuda.com) via DuckDuckGo; link salvo 201; sessão `completed`; tema alternado |
+| Modo local — renovação de sessão sem login | ✅ | Com o `localStorage` apagado (cenário "porta diferente"): nova sessão pela ponte, **mesmo usuário** (id 1 → 1) e dados preservados. Com access e refresh inválidos (cenário "7 dias sem abrir"): o interceptor caiu para a ponte e a página `/materias` carregou normalmente com token novo |
+| Modo local — caminho de falha (acesso de fora da janela) | ✅ | `GET /api/subjects` sem token → 401; `POST /auth/login` com o e-mail local → 401 (senha aleatória descartada); `http://127.0.0.1:8765/` aberto num navegador comum → `window.pywebview` indefinido, nenhum token, tela "Não foi possível abrir sua área de estudos." |
+| Modo web inalterado | ✅ | `npm run build` sem a marcação não contém o código da ponte (`pywebviewready` ausente do bundle); rota protegida redireciona para `/login` com a tela de login e a conta demo; pela API: cadastro 201, login 200, senha errada 401, refresh 200, reuso de refresh 401 "Sessão comprometida" e o refresh seguinte também 401; `user_agent`/`ip_address` continuam gravados no refresh token após a refatoração de `auth.py`. `npm run lint`: 0 erros |
 | Download do `.ics` e abertura de links externos pela janela | 🟡 Configurado, não exercitado | `ALLOW_DOWNLOADS` e `OPEN_EXTERNAL_LINKS_IN_BROWSER` ligados no launcher, mas não cliquei neles no teste (gravaria em Downloads / abriria o navegador da máquina). Verificar na primeira execução manual |
 
 ---
@@ -239,6 +244,8 @@ backend/
       notifier.py                 — gerenciador de conexões WebSocket
       ics.py                      — gerador manual de iCalendar (RFC 5545)
       tags.py
+      sessions.py                 — emissão do par de tokens (rotas de auth) + sessão do usuário
+                                    local do desktop (`issue_local_session`)
     seed.py                       — dados de demonstração (conta demo@studysync.dev)
   requirements.txt
   run.py
@@ -256,7 +263,8 @@ frontend/
       ui/          — Button, Field, Modal, ConfirmDialog, Misc (Badge/EmptyState/Toggle/...),
                      SubjectIcon
     context/       — Auth, Theme, Toast, Notification (WebSocket + notificação nativa)
-    lib/           — api.js (axios + refresh automático), services.js, format.js, constants.js
+    lib/           — api.js (axios + refresh automático), services.js, format.js, constants.js,
+                     desktop.js (`IS_DESKTOP` pelo build `VITE_DESKTOP=true` + ponte do pywebview)
     pages/         — Dashboard, Subjects, Notes, Schedule, Search, Library, Settings, Login,
                      Register, NotFound
     index.css      — TODOS os tokens de tema: cores (`--color-brand-*`), raio (`--radius-*`),
@@ -348,15 +356,19 @@ raio fixo, para que futuras mudanças de identidade visual continuem sendo de ba
   - **Fontes vêm do Google Fonts** (`index.html`). Sem internet, títulos caem para Georgia e o
     texto para Segoe UI — a identidade "Caderno" fica parcial offline. Empacotar Fraunces/Inter
     em `frontend/public` resolveria (a busca de conteúdo continua exigindo internet de todo modo).
-  - **Textos que não fazem sentido no desktop:** a tela de login oferece "Entrar com a conta
-    demo" (a conta não existe, o `seed` não roda no app) e o erro de conexão de `api.js` sugere
-    "Ele está rodando em http://localhost:8000?".
+  - ~~Textos que não fazem sentido no desktop (conta demo, "localhost:8000")~~ — **resolvido
+    em 2026-09-13** pelo modo local: o desktop não tem tela de login, e o erro de conexão tem
+    texto próprio.
   - **O link de assinatura `.ics` aponta para `127.0.0.1:8765`:** só funciona na própria
     máquina e com o app aberto — Google Calendar não alcança. O download do `.ics` segue útil.
-  - **Porta fixa 8765:** se estiver ocupada, o app sobe em outra porta, mas o `localStorage`
-    é por origem — nessa execução o usuário precisa logar de novo e o tema volta ao padrão.
-  - **Sessão salva expira após 7 dias sem abrir o app** (`REFRESH_TOKEN_EXPIRE_DAYS`), e aí
-    pede login de novo.
+  - **Porta fixa 8765:** se estiver ocupada, o app sobe em outra porta; o `localStorage` é por
+    origem, então o tema volta ao padrão nessa execução. (A sessão não se perde mais — a ponte
+    emite outra.)
+  - ~~Sessão salva expira após 7 dias sem abrir~~ — **resolvido em 2026-09-13**: no desktop o
+    interceptor renova pela ponte quando o refresh vence.
+  - **Uma conta só no desktop.** O banco suporta vários usuários, mas o app usa sempre o usuário
+    local. Quem usou um build de teste anterior (com login) não vê os dados daquela conta — não
+    houve release com login, então não há migração.
 
 ---
 

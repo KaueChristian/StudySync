@@ -11,6 +11,8 @@ Todos os dados ficam na máquina do usuário, em `%LOCALAPPDATA%\\StudySync`:
     webview/       perfil do WebView2 (localStorage: sessão e tema)
     studysync.log  log do servidor
 
+Não há tela de login: a janela pede a sessão do usuário local à `DesktopBridge`.
+
 Uso a partir do código-fonte (sem empacotar), com o frontend já buildado:
     backend\\venv\\Scripts\\python.exe desktop\\launcher.py
 """
@@ -118,6 +120,20 @@ def configure_environment(data: Path, port: int) -> None:
     )
 
 
+class DesktopBridge:
+    """
+    Exposta à janela como `window.pywebview.api`. Só o código carregado dentro
+    da janela alcança a ponte — um site aberto no navegador da máquina, ou
+    outro programa chamando 127.0.0.1:8765, não recebe token e a API continua
+    fechada para ele.
+    """
+
+    def local_session(self, timezone_name: str | None = None) -> dict:
+        from app.services.sessions import issue_local_session
+
+        return issue_local_session(timezone_name)
+
+
 def main() -> int:
     mutex = acquire_single_instance()
     if mutex is None:
@@ -179,6 +195,7 @@ def main() -> int:
         height=820,
         min_size=(960, 640),
         background_color="#f6f1e6",  # --surface-muted, evita o flash branco
+        js_api=DesktopBridge(),
     )
     webview.start(private_mode=False, storage_path=str(data / "webview"))
 

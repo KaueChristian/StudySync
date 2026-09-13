@@ -9,6 +9,8 @@
  */
 import axios from 'axios'
 
+import { IS_DESKTOP, requestLocalSession } from './desktop'
+
 const ACCESS_KEY = 'studysync:access_token'
 const REFRESH_KEY = 'studysync:refresh_token'
 
@@ -71,7 +73,7 @@ export function setSessionExpiredHandler(handler) {
   onSessionExpired = handler
 }
 
-async function refreshAccessToken() {
+async function renewWithRefreshToken() {
   const refreshToken = tokenStore.refresh
   if (!refreshToken) throw new Error('Sem refresh token.')
 
@@ -84,6 +86,19 @@ async function refreshAccessToken() {
   )
   tokenStore.save(data)
   return data.access_token
+}
+
+async function refreshAccessToken() {
+  try {
+    return await renewWithRefreshToken()
+  } catch (error) {
+    // No desktop não há login para onde mandar o usuário: a ponte emite uma
+    // sessão nova (refresh vencido, ou porta diferente com localStorage vazio).
+    if (!IS_DESKTOP) throw error
+    const data = await requestLocalSession()
+    tokenStore.save(data)
+    return data.access_token
+  }
 }
 
 api.interceptors.response.use(
@@ -133,7 +148,9 @@ export function getErrorMessage(error, fallback = 'Algo deu errado. Tente novame
   if (axios.isAxiosError(error)) {
     if (error.code === 'ECONNABORTED') return 'A requisição demorou demais. Tente novamente.'
     if (!error.response) {
-      return 'Não foi possível falar com o servidor. Ele está rodando em http://localhost:8000?'
+      return IS_DESKTOP
+        ? 'Não foi possível falar com o StudySync. Feche e abra o app novamente.'
+        : 'Não foi possível falar com o servidor. Ele está rodando em http://localhost:8000?'
     }
 
     const data = error.response.data
