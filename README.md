@@ -81,20 +81,15 @@ python -c "import secrets; print(secrets.token_urlsafe(64))"
 > Em desenvolvimento a chave é opcional (uma temporária é gerada a cada boot, invalidando
 > os tokens no restart). Em `ENV=production` ela é **obrigatória**.
 
-**Crie o banco de dados** — via migrations (recomendado):
+**Banco de dados** — criado e atualizado automaticamente: ao subir, o backend aplica as
+migrations pendentes do Alembic (banco novo, banco de uma versão anterior ou banco antigo
+criado sem versão). Para fazer isso manualmente, sem subir o servidor:
 
 ```bash
-alembic upgrade head
-```
-
-<details>
-<summary>Alternativa sem Alembic</summary>
-
-```bash
-python -m app.db.init_db          # cria as tabelas
+alembic upgrade head              # aplica as migrations pendentes
+python -m app.db.init_db          # idem, e também migra bancos antigos sem versão
 python -m app.db.init_db --reset  # apaga e recria (destrutivo)
 ```
-</details>
 
 **Popule com dados de demonstração** (opcional, mas recomendado):
 
@@ -349,7 +344,8 @@ npm run preview    # serve o build localmente
 | Sino mostra **"Reconectando…"** | O WebSocket caiu (backend reiniciado). Ele reconecta sozinho com backoff exponencial; confirme em http://localhost:8000/health. |
 | Busca retorna **503** | Sem acesso à internet ou todos os provedores bloquearam a requisição. Verifique a conexão e tente novamente. |
 | Todos os tokens caem após reiniciar o backend | `SECRET_KEY` vazia no `.env` — uma chave temporária é gerada a cada boot. Defina uma chave fixa. |
-| `no such table: users` | Banco não inicializado. Rode `alembic upgrade head` em `backend/`. |
+| `no such table: users` | Banco não inicializado. Rode `python -m app.db.init_db` em `backend/` (o backend também faz isso ao subir). |
+| `table users already exists` ao rodar `alembic upgrade head` | Banco criado sem registro de versão por uma versão antiga do projeto. Rode `python -m app.db.init_db`, que carimba a revisão equivalente e aplica o restante. |
 | Lembretes não disparam | O agendador não subiu. Cheque `scheduler_running` em `/health` e evite `--reload` em produção (ele duplicaria o processo e o agendador). |
 | Porta 5173 ou 8000 ocupada | Use `python run.py --port 9000` ou ajuste `server.port` em `frontend/vite.config.js`. |
 

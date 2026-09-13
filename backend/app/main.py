@@ -44,8 +44,8 @@ async def lifespan(_: FastAPI):
     """Startup e shutdown da aplicação."""
     logger.info("Iniciando %s v%s (%s)", settings.PROJECT_NAME, settings.VERSION, settings.ENV)
 
-    # Cria as tabelas caso ainda não existam (conveniência em desenvolvimento;
-    # em produção o esquema é gerenciado pelo Alembic).
+    # Aplica as migrations pendentes do Alembic (cria o banco do zero, se
+    # preciso) — o mesmo caminho em desenvolvimento e em produção.
     init_database()
 
     # O agendador roda em outra thread e precisa de uma referência ao event

@@ -64,6 +64,12 @@ def run_migrations_online() -> None:
         # Sem isso o SQLite ignora os ON DELETE CASCADE durante a migration.
         if connection.dialect.name == "sqlite":
             connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+            # O PRAGMA abre uma transação implícita (autobegin do SQLAlchemy 2.0).
+            # Sem este commit, `context.begin_transaction()` encontra a transação
+            # já aberta, não assume o commit, e ao fechar a conexão o INSERT em
+            # `alembic_version` é desfeito — as tabelas ficam criadas (o SQLite
+            # confirma DDL sozinho), mas o banco perde o registro da revisão.
+            connection.commit()
 
         context.configure(
             connection=connection,
