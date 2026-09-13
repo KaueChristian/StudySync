@@ -29,11 +29,33 @@ Baixe a versão mais recente em **[Releases](https://github.com/KaueChristian/St
 | `StudySync-Setup-<versão>.exe` | **Recomendado.** Instala para o seu usuário (sem pedir administrador), com atalho no Menu Iniciar e desinstalador |
 | `StudySync-<versão>-win64.zip` | Portátil: extraia a pasta `StudySync` inteira e abra o `StudySync.exe` de dentro dela |
 
+### Avisos esperados na instalação
+
+O executável **ainda não tem assinatura digital**. Por isso o navegador e o Windows tratam
+cada versão nova como "incomum" e mostram avisos. Não é detecção de vírus: é falta de
+reputação, que só a assinatura e o volume de downloads resolvem. Faça isto **apenas com
+arquivos baixados da página oficial de
+[Releases](https://github.com/KaueChristian/StudySync/releases)**:
+
+1. **O navegador bloqueia o download** ("pode ser perigoso" / "não é baixado com frequência"):
+   - **Edge:** no painel de downloads, `…` → **Manter** → **Mostrar mais** → **Manter mesmo assim**.
+   - **Chrome:** no painel de downloads, **Baixar arquivo suspeito** (ou, em `chrome://downloads`,
+     **Manter**).
+   - **Firefox:** clique no download bloqueado → **Permitir download**.
+
+   Os nomes dos botões podem variar conforme a versão do navegador.
+2. **(Opcional) Confira se o arquivo é o mesmo que o GitHub Actions gerou** a partir deste
+   código. No PowerShell, na pasta do download:
+   ```powershell
+   (Get-FileHash .\StudySync-Setup-1.0.0.exe -Algorithm SHA256).Hash.ToLower()
+   ```
+   O resultado tem que ser igual à linha do arquivo no `SHA256SUMS.txt` do mesmo Release.
+3. **"O Windows protegeu o computador"** (SmartScreen) ao abrir: clique em
+   **Mais informações → Executar assim mesmo**.
+
+### Bom saber
+
 - **Sem conta nem login** — o app desktop é local e de um usuário só.
-- **Aviso "O Windows protegeu o computador":** o executável ainda não tem assinatura digital.
-  Clique em **Mais informações → Executar assim mesmo**. Os arquivos são gerados pelo
-  GitHub Actions a partir deste código; confira o hash com o `SHA256SUMS.txt` do Release
-  (`Get-FileHash .\arquivo -Algorithm SHA256`).
 - Dados em `%LOCALAPPDATA%\StudySync`, mantidos ao atualizar ou desinstalar.
 - Requer o WebView2 Runtime (já incluso no Windows 11 e na maioria das instalações do 10).
 - A busca de conteúdo usa a internet; o resto funciona offline.
