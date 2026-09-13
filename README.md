@@ -130,6 +130,25 @@ Abra **http://localhost:5173** 🎉
 > (incluindo o WebSocket) para `http://127.0.0.1:8000`, evitando qualquer questão de CORS
 > em desenvolvimento.
 
+### 3️⃣ App desktop (Windows, opcional)
+
+Gera um `StudySync.exe` que roda tudo localmente — backend, banco e interface — numa janela
+nativa (WebView2, já presente no Windows 10/11), sem terminal nem navegador.
+
+```powershell
+backend\venv\Scripts\python.exe -m pip install -r desktop\requirements.txt
+pwsh desktop\build.ps1
+```
+
+Saída: `desktop\dist\StudySync\StudySync.exe` — **a pasta `StudySync\` inteira é o app** (o
+`.exe` depende da subpasta `_internal\`). Os dados do usuário ficam em
+`%LOCALAPPDATA%\StudySync` (banco, chave dos tokens, perfil do WebView2 e `studysync.log`),
+fora da pasta do app — substituir a pasta por uma versão nova preserva tudo, e o banco é
+migrado sozinho no boot.
+
+> O app desktop começa sem contas: crie a sua pela tela de cadastro. A conta demo só existe
+> onde `python -m app.seed` foi rodado.
+
 ---
 
 ## 📁 Estrutura do projeto

@@ -193,6 +193,26 @@ Efeitos colaterais conhecidos das correções (aceitáveis, só registrados): `t
 `verify_password` trunca em 72 bytes (inalcançável hoje, porque o cadastro rejeita senha maior
 que isso).
 
+### Empacotamento desktop (2026-09-13) — roadmap item 3, rota (a)
+
+Validado com o `StudySync.exe` gerado de fato (`desktop\build.ps1`), aberto como executável, com
+`LOCALAPPDATA` apontado para uma pasta descartável e o DevTools remoto do WebView2 ligado só
+durante o teste para inspecionar a janela real.
+
+| Item | Status | Evidência |
+|---|---|---|
+| Build (`npm run build` + PyInstaller, modo pasta) | ✅ | `desktop\dist\StudySync\StudySync.exe`, pasta com 46,2 MB; `_internal\alembic\versions\0001–0003` e `_internal\frontend_dist\index.html` presentes no pacote |
+| Janela nativa servindo a interface pelo próprio backend | ✅ | Janela "StudySync" 1280×820 abriu em `http://127.0.0.1:8765/login` (captura da janela real); `studysync.log` vazio, sem erro |
+| Dados locais em `%LOCALAPPDATA%\StudySync` | ✅ | Primeira execução criou `studysync.db` (migrado para a revisão `0003` no boot), `secret.key`, `webview\` e `studysync.log` |
+| Roteiro de fumaça (§3.2 do protocolo) dentro do `.exe` | ✅ | Cadastro 201; matéria 201; sessão com lembrete 201 (`remind_at` 1 min antes do início); **lembrete chegou pelo WebSocket** e o sino da janela nativa passou a "Notificações (1 não lida)"; busca "fotossíntese" pelo DuckDuckGo com 5 links reais (infoescola, pt.khanacademy.org, brasilescola, sobiologia, todamateria); link salvo na sessão 201; sessão `completed` 200; tema alternado na janela (`dark true → false`, gravado como `light`) |
+| Fechar a janela encerra o servidor | ✅ | Após o "X" (`WM_CLOSE`): processo saiu em 4,2 s e a porta 8765 parou de responder (conferido com HTTP real) |
+| Persistência entre execuções | ✅ | Reaberto: janela entrou direto no painel ("Boa noite, Teste!"), sem pedir login; tema `light` mantido; sessão "Fotossíntese (teste desktop) / completed / links=1" preservada |
+| Caminho de falha: segunda instância | ✅ | Segunda execução mostrou a caixa "O StudySync já está aberto." e saiu com código 1; a primeira seguiu respondendo `/health` |
+| Caminho de falha: porta 8765 ocupada | ✅ | Com outro programa escutando na 8765, o app subiu na 53125, registrou o aviso no log e abriu a janela normalmente; ao fechar, as duas portas ficaram livres |
+| Regressão do modo de desenvolvimento | ✅ | Sem `FRONTEND_DIST`, `/` continua devolvendo o JSON da API, `/docs` 200 e `/agenda` 404; com `FRONTEND_DIST` inválido, idem, com aviso no log. `npm run lint`: 0 erros (os mesmos 8 avisos); `npm run build` OK |
+| Rotas no modo desktop | ✅ | `/` e `/agenda` → `index.html` com `Cache-Control: no-cache`; `/assets/*.js` → `max-age=31536000, immutable`; `/api/nao-existe` → 404 JSON (não cai no `index.html`); `/api/auth/me` sem token → 401; caminho com `..%2f` → `index.html`, nunca arquivo fora do build |
+| Download do `.ics` e abertura de links externos pela janela | 🟡 Configurado, não exercitado | `ALLOW_DOWNLOADS` e `OPEN_EXTERNAL_LINKS_IN_BROWSER` ligados no launcher, mas não cliquei neles no teste (gravaria em Downloads / abriria o navegador da máquina). Verificar na primeira execução manual |
+
 ---
 
 ## 4. Arquitetura real
@@ -243,6 +263,15 @@ frontend/
                      tipografia (`--font-sans`/`--font-display`), superfícies (`.card`)
   vite.config.js   — proxy `/api` → `http://127.0.0.1:8000` em dev
 
+desktop/                          — empacotamento Windows (roadmap item 3, rota a)
+  launcher.py                     — entrada do .exe: instância única, dados em %LOCALAPPDATA%\StudySync,
+                                    uvicorn numa thread em 127.0.0.1:8765 + janela pywebview (WebView2)
+  StudySync.spec                  — PyInstaller (modo pasta): app/, alembic/ como arquivos, frontend/dist
+  build.ps1                       — npm run build + PyInstaller → desktop/dist/StudySync/StudySync.exe
+  requirements.txt                — pywebview, pythonnet, pyinstaller (só para gerar o .exe)
+  (o backend serve o build do frontend quando `FRONTEND_DIST` está definido — `main.py`, rota
+   curinga registrada por último; vazio = API pura, como em desenvolvimento)
+
 .claude/launch.json — configs de preview: "backend" (venv/Scripts/python.exe run.py
                       --no-reload, porta 8000) e "frontend" (npm run dev, porta 5173)
 ```
@@ -264,7 +293,7 @@ raio fixo, para que futuras mudanças de identidade visual continuem sendo de ba
 | 0 | **Corrigir o `Accept-Encoding: br` antes de qualquer outra coisa** (`scraper.py:78`) | Nada | ✅ Concluído | Removido `br` do cabeçalho em `scraper.py:80`. Revalidado ao vivo contra Bing (10/10 com URLs limpas), DDG (10/10) e pipeline completo (5 links ranqueados). |
 | 1 | Commitar a correção do `scraper.py` (bug do Bing + anti-bloqueio) | Item 0 | ✅ Concluído | Validado de acordo com o `VALIDATION_PROTOCOL.md` §3.3 e commitado. |
 | 2 | Logo e imagens próprias por seção/opção do menu | Nada | ❌ Adiado pelo autor | O autor pediu explicitamente para não avançar nisso ainda ("preciso refinar mais algumas coisas") — não iniciar sem sinal verde |
-| 3 | Empacotamento desktop (dados 100% locais, sem depender de hospedagem) | Redesign visual (✅) | ❌ Discutido, não implementado | Duas rotas avaliadas com o autor: **(a)** PyInstaller (backend inteiro + frontend buildado servido pelo FastAPI) + `pywebview` (janela nativa via WebView2, sem Chromium embutido) — caminho mais simples, recomendado; **(b)** Tauri com o mesmo `.exe` do PyInstaller como sidecar — instalador mais "profissional", mais setup (toolchain Rust). Eletron foi descartado — exigiria ou reescrever o backend em Node ou rodar o mesmo sidecar Python com ~150MB+ de Chromium embutido, sem ganho real sobre as outras duas opções |
+| 3 | Empacotamento desktop (dados 100% locais, sem depender de hospedagem) | Redesign visual (✅) | ✅ Concluído (2026-09-13, rota a) | Implementado em `desktop/` e validado com o `.exe` real (§3, "Empacotamento desktop"). Pendências conhecidas em §6: sem ícone próprio (depende do item 2), sem instalador nem assinatura de código, lembretes só com o app aberto. Rotas avaliadas originalmente com o autor: **(a)** PyInstaller (backend inteiro + frontend buildado servido pelo FastAPI) + `pywebview` (janela nativa via WebView2, sem Chromium embutido) — caminho mais simples, recomendado; **(b)** Tauri com o mesmo `.exe` do PyInstaller como sidecar — instalador mais "profissional", mais setup (toolchain Rust). Eletron foi descartado — exigiria ou reescrever o backend em Node ou rodar o mesmo sidecar Python com ~150MB+ de Chromium embutido, sem ganho real sobre as outras duas opções |
 | 4 | Suíte de testes automatizados (backend e frontend) | Nada | ❌ Não existe | Ver débito técnico em §6 — toda validação até agora foi manual/ao vivo, não há rede de segurança automatizada |
 
 ---
@@ -307,6 +336,27 @@ raio fixo, para que futuras mudanças de identidade visual continuem sendo de ba
   decodificado legível, ranking/dedupe, cálculo de `remind_at`, escopos de recorrência) em
   `pytest` de verdade dentro de `backend/tests/` — é a forma mais barata de o item 4 do
   roadmap começar a existir.
+- **Limitações do app desktop (2026-09-13), registradas ao empacotar — nenhuma corrigida:**
+  - **Lembrete só com o app aberto.** Fechar a janela encerra o servidor e o agendador; não há
+    ícone na bandeja nem início com o Windows. A janela de tolerância (120 min) cobre reabrir
+    logo depois, mas não um dia inteiro fechado.
+  - **Sem ícone próprio** (usa o padrão do PyInstaller/Python) — de propósito: logo e imagens
+    são o item 2 do roadmap, adiado pelo autor.
+  - **Sem instalador e sem assinatura de código.** A distribuição é a pasta
+    `desktop\dist\StudySync\` inteira; o SmartScreen do Windows deve alertar em outra máquina.
+    O `.exe` também exige o WebView2 Runtime (nativo no Windows 11 e na maioria dos 10).
+  - **Fontes vêm do Google Fonts** (`index.html`). Sem internet, títulos caem para Georgia e o
+    texto para Segoe UI — a identidade "Caderno" fica parcial offline. Empacotar Fraunces/Inter
+    em `frontend/public` resolveria (a busca de conteúdo continua exigindo internet de todo modo).
+  - **Textos que não fazem sentido no desktop:** a tela de login oferece "Entrar com a conta
+    demo" (a conta não existe, o `seed` não roda no app) e o erro de conexão de `api.js` sugere
+    "Ele está rodando em http://localhost:8000?".
+  - **O link de assinatura `.ics` aponta para `127.0.0.1:8765`:** só funciona na própria
+    máquina e com o app aberto — Google Calendar não alcança. O download do `.ics` segue útil.
+  - **Porta fixa 8765:** se estiver ocupada, o app sobe em outra porta, mas o `localStorage`
+    é por origem — nessa execução o usuário precisa logar de novo e o tema volta ao padrão.
+  - **Sessão salva expira após 7 dias sem abrir o app** (`REFRESH_TOKEN_EXPIRE_DAYS`), e aí
+    pede login de novo.
 
 ---
 
@@ -327,6 +377,7 @@ raio fixo, para que futuras mudanças de identidade visual continuem sendo de ba
 | 2026-09-12 | Limite por domínio pós-pontuação e flexibilizado para Wikipédia em `dedupe_and_rank` | Resolve os defeitos 2 e 11: permite que a Wikipédia entregue até `limit` links (3–5) em fallback, e garante que nos buscadores gerais os melhores links de cada domínio sejam selecionados em vez dos primeiros da listagem bruta |
 | 2026-09-12 | Resolução simultânea de todos os defeitos de prioridade média (Defeitos 3, 4, 5, 6, 7 e 8) | Normalização de URL com `urlencode` (evita espaços crus); `DashboardStats` com `sessions_pending` e `sessions_overdue`; resumo do mês isolado por `isSameMonth`; URLs públicas absolutas via `absoluteApiUrl`; Pomodoro resiliente a abas inativas via `setInterval` + `visibilitychange`; disjuntor de busca calibrado com parâmetros por provedor e fallback seguro contra blackouts |
 | 2026-09-12 | Resolução simultânea de todos os defeitos de prioridade baixa (Defeitos 9, 10, 12, 13, 14, 15, 16 e 17) | Escape seguro de quebras de linha em ICS; preservação de termos de 2 caracteres em `tokenize()`; limpeza de tags órfãs em cascata na exclusão de matérias; integridade de `schedule_id` e fallback informativo em notificações; ESLint flat config configurado no frontend; ticker intervalar dinâmico em `ScheduleCard`; correção em `truncate()`; flexão singular/plural correta em calendário e diálogos |
+| 2026-09-13 | **Empacotamento desktop pela rota (a) do roadmap: PyInstaller + `pywebview`.** O mesmo processo roda o backend (uvicorn numa thread, só em `127.0.0.1`) e serve o build do frontend pela mesma origem (`FRONTEND_DIST`, sem mudar uma linha do frontend — as chamadas já eram relativas a `/api`). Detalhes: PyInstaller em **modo pasta**, não arquivo único; dados em `%LOCALAPPDATA%\StudySync`, fora da pasta do app; `ENV=production` com `SECRET_KEY` gerada uma vez e guardada em `secret.key`; **porta fixa 8765** com fallback; trava de instância única por mutex; o esquema continua sendo migrado no boot pelo `init_database()` | Rota (a) era a recomendada no roadmap e a (b) exige toolchain Rust, ausente na máquina. Modo pasta: o arquivo único se extrai para `%TEMP%` a cada abertura (boot mais lento e mais falso-positivo de antivírus). Dados fora da pasta do app: trocar a pasta por uma versão nova não apaga nada, e a decisão de 2026-09-12 (boot aplica migrations) atualiza o banco no lugar. Chave persistente: a chave efêmera derrubaria a sessão salva a cada abertura. Porta fixa: o `localStorage` do WebView2 é por origem, e uma porta aleatória deslogaria o usuário sempre. Instância única: duas cópias rodariam dois agendadores sobre o mesmo banco |
 | 2026-09-13 | Resolução completa dos 10 defeitos abertos (N1 a N11) | Filtro rigoroso de anúncios no DuckDuckGo (classes `.result--ad`, URLs `y.js`); `sessions_overdue` corrigido para `end_at < now`; dia do painel e agregação de 7 dias calculados no fuso horário do usuário via `ZoneInfo`; validação em schemas Pydantic contra `null` em colunas obrigatórias com 422; registro de função `unaccent` personalizada na conexão SQLite + escape de curingas LIKE para busca e ordenação acidentalmente insensíveis a acentos; validação de timezone IANA; teto de 24h no PATCH de agendamento; `normalize_url` no salvamento de links; unicidade case-insensitive em matérias; suporte a separação por vírgula no `TagInput`, limpeza de pipes em resumos Markdown e concordância plural no sino |
 
 ---
@@ -335,6 +386,22 @@ raio fixo, para que futuras mudanças de identidade visual continuem sendo de ba
 
 > Toda entrada de trabalho relevante entra aqui, mais recente no topo. Formato: `data — o que
 > mudou — arquivo(s) — por quê`.
+
+- **2026-09-13 (2)** — **Empacotamento desktop (roadmap item 3, rota a) implementado e
+  validado com o `.exe` real.** Arquivos: novos `desktop/launcher.py`, `desktop/StudySync.spec`,
+  `desktop/build.ps1` e `desktop/requirements.txt`; `backend/app/core/config.py` (setting
+  `FRONTEND_DIST` + `frontend_dist_dir`); `backend/app/main.py` (com `FRONTEND_DIST`, `/` e
+  qualquer rota fora de `/api` servem o build do Vite, com `index.html` sem cache e assets
+  imutáveis; sem ela, nada muda); `.gitignore` (`desktop/build/`, `desktop/dist/`); `README.md`
+  (seção "App desktop"). Ferramentas de build instaladas no venv do backend: pywebview 6.2.1,
+  pythonnet 3.1.0 (primeiro com Python 3.14), PyInstaller 6.22.3. Decisão em §7. Validação em §3
+  ("Empacotamento desktop"): roteiro de fumaça completo dentro do `.exe`, com o lembrete chegando
+  ao sino da janela nativa, persistência após fechar e reabrir, instância única, porta ocupada e
+  regressão do modo dev. Achados fora de escopo (conta demo e mensagem de `localhost:8000` na UI
+  desktop, fontes do Google offline, lembrete só com o app aberto, `.ics` por assinatura inútil
+  fora da máquina) registrados em §6, nenhum corrigido. Dados de teste ficaram só na pasta
+  descartável; o `%LOCALAPPDATA%\StudySync` real não foi criado; portas 8765, 53125, 8790 e 8791
+  conferidas livres com HTTP real.
 
 - **2026-09-13** — **Correção e validação completa dos 10 novos defeitos (N1 a N11).**
   - **N1 (`scraper.py`):** Filtro de blocos de anúncios (`result--ad`, `badge--ad`, URLs com `y.js`, `ad_domain`) e descarte de links cujo domínio seja o próprio `duckduckgo.com`. Validado contra a internet real: busca por "curso de ingles online" devolveu 5 links didáticos legítimos e 0 anúncios.
