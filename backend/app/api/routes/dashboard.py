@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import re
 from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter
 from sqlalchemy import func, select
@@ -23,16 +21,9 @@ from app.schemas.dashboard import (
 )
 from app.schemas.note import NoteSummary
 from app.schemas.schedule import ScheduleRead
+from app.services.excerpt import markdown_excerpt
 
 router = APIRouter()
-
-_MARKDOWN_NOISE = re.compile(r"(```.*?```|`[^`]*`|[*_>#\[\]()!|~-]|\r)", re.DOTALL)
-
-
-def _excerpt(content: str, length: int = 140) -> str:
-    plain = _MARKDOWN_NOISE.sub(" ", content or "")
-    plain = re.sub(r"\s+", " ", plain).strip()
-    return plain[:length] + ("…" if len(plain) > length else "")
 
 
 @router.get("", response_model=DashboardResponse, summary="Resumo do painel")
@@ -46,10 +37,7 @@ def get_dashboard(current_user: CurrentUser, db: DbSession) -> DashboardResponse
     user_id = current_user.id
     now = datetime.now(timezone.utc)
 
-    try:
-        user_tz = ZoneInfo(current_user.timezone or "America/Sao_Paulo")
-    except Exception:
-        user_tz = timezone.utc
+    user_tz = current_user.zone
 
     # "Hoje" e janela da semana calculados no fuso horário local do usuário
     now_local = now.astimezone(user_tz)
@@ -154,7 +142,7 @@ def get_dashboard(current_user: CurrentUser, db: DbSession) -> DashboardResponse
     note_summaries = []
     for note in recent_notes:
         summary = NoteSummary.model_validate(note)
-        summary.excerpt = _excerpt(note.content)
+        summary.excerpt = markdown_excerpt(note.content, length=140)
         summary.links_count = len(note.search_results)
         note_summaries.append(summary)
 

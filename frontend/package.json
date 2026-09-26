@@ -1,7 +1,7 @@
 {
   "name": "studysync-frontend",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "description": "Interface do StudySync — anotações, agendamentos e pesquisa de conteúdo de estudos.",
   "scripts": {

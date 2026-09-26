@@ -32,7 +32,7 @@ class Settings(BaseSettings):
 
     # ------------------------------------------------------------------ app
     PROJECT_NAME: str = "StudySync API"
-    VERSION: str = "1.0.0"
+    VERSION: str = "1.1.0"
     API_PREFIX: str = "/api"
     ENV: str = "development"
 

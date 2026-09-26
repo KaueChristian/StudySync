@@ -6,6 +6,7 @@
  * estudado (ex.: "partes do corpo humano").
  */
 import { useEffect, useState } from 'react'
+import { isToday } from 'date-fns'
 import { CalendarClock, Sparkles, Timer } from 'lucide-react'
 
 import ContentSearchPanel from '@/components/search/ContentSearchPanel'
@@ -18,7 +19,12 @@ import { useToast } from '@/context/ToastContext'
 import { getErrorMessage } from '@/lib/api'
 import { scheduleService } from '@/lib/services'
 import { REMINDER_OPTIONS } from '@/lib/constants'
-import { fromInputValue, roundedInputValue, toInputValue } from '@/lib/format'
+import {
+  formatReminderLead,
+  fromInputValue,
+  roundedInputValue,
+  toInputValue,
+} from '@/lib/format'
 
 /** Estado inicial: começa daqui a 1h e dura 1h. */
 function emptyForm(defaults = {}) {
@@ -86,7 +92,9 @@ export default function ScheduleModal({
       if (defaultDate) {
         const date = new Date(defaultDate)
         date.setHours(19, 0, 0, 0)
-        start = toInputValue(date)
+        // Hoje, depois das 19h, esse horário já passou — e uma sessão no
+        // passado nasce sem lembrete. Sugere a próxima hora cheia.
+        start = isToday(date) && date < new Date() ? undefined : toInputValue(date)
       }
       setForm(emptyForm({ start, subject_id: defaultSubjectId ?? '' }))
       setScheduleId(null)
@@ -169,7 +177,7 @@ export default function ScheduleModal({
       toast.success(scheduleId ? 'Sessão atualizada!' : 'Sessão agendada!', {
         description:
           saved.reminder_enabled && !saved.reminder_sent
-            ? `Você será avisado ${saved.remind_minutes} minutos antes.`
+            ? `Você será avisado ${formatReminderLead(saved.remind_minutes)}.`
             : undefined,
       })
       if (closeAfter) onClose()

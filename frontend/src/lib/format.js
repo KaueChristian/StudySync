@@ -97,6 +97,24 @@ export function formatMinutes(total) {
   return rest ? `${hours}h ${rest}min` : `${hours}h`
 }
 
+/**
+ * Antecedência do lembrete: 0 → "na hora exata", 90 → "1h 30min antes",
+ * 1440 → "1 dia antes". Mesmo texto das opções do formulário.
+ */
+export function formatReminderLead(minutes) {
+  const total = Math.max(0, Math.round(minutes ?? 0))
+  if (total === 0) return 'na hora exata'
+  if (total % 1440 === 0) {
+    const days = total / 1440
+    return `${days} dia${days > 1 ? 's' : ''} antes`
+  }
+  if (total % 60 === 0) {
+    const hours = total / 60
+    return `${hours} hora${hours > 1 ? 's' : ''} antes`
+  }
+  return `${formatMinutes(total)} antes`
+}
+
 // ---------------------------------------------------------------------------
 // Inputs datetime-local
 // ---------------------------------------------------------------------------

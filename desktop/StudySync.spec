@@ -57,6 +57,9 @@ exe = EXE(
     exclude_binaries=True,
     name="StudySync",
     console=False,
+    # Gerado por brand/build.py. O pywebview usa o ícone do próprio .exe na
+    # janela e na barra de tarefas, então não precisa ser passado ao launcher.
+    icon=str(ROOT / "desktop" / "StudySync.ico"),
     upx=False,
 )
 coll = COLLECT(

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from datetime import datetime, timezone
 from typing import Annotated, Literal
 
@@ -19,21 +18,12 @@ from app.models.tag import Tag
 from app.schemas.common import Message, PaginatedResponse
 from app.schemas.note import NoteCreate, NoteRead, NoteSummary, NoteUpdate
 from app.schemas.search import SearchResultRead
+from app.services.excerpt import markdown_excerpt
 from app.services.tags import cleanup_orphan_tags, resolve_tags
 
 router = APIRouter()
 
 SortField = Literal["updated_at", "created_at", "title"]
-
-# Marcações Markdown removidas ao gerar o resumo de listagem.
-_MARKDOWN_NOISE = re.compile(r"(```.*?```|`[^`]*`|[*_>#\[\]()!|~-]|\r)", re.DOTALL)
-
-
-def _excerpt(content: str, length: int = 180) -> str:
-    """Gera um resumo em texto puro a partir do Markdown."""
-    plain = _MARKDOWN_NOISE.sub(" ", content or "")
-    plain = re.sub(r"\s+", " ", plain).strip()
-    return plain[:length] + ("…" if len(plain) > length else "")
 
 
 def get_owned_note(db: DbSession, owner_id: int, note_id: int) -> Note:
@@ -139,7 +129,7 @@ def list_notes(
     items = []
     for note in notes:
         summary = NoteSummary.model_validate(note)
-        summary.excerpt = _excerpt(note.content)
+        summary.excerpt = markdown_excerpt(note.content)
         summary.links_count = len(note.search_results)
         items.append(summary)
 

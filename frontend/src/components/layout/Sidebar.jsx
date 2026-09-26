@@ -11,6 +11,8 @@ import {
   X,
 } from 'lucide-react'
 
+import { BrandIcon } from '@/components/ui/Brand'
+
 const LINKS = [
   { to: '/', label: 'Painel', icon: LayoutDashboard, end: true },
   { to: '/materias', label: 'Matérias', icon: GraduationCap },
@@ -64,9 +66,7 @@ export default function Sidebar({ open, onClose }) {
       >
         <div className="flex h-16 shrink-0 items-center justify-between px-5">
           <div className="flex items-center gap-2.5">
-            <div className="bg-brand-600 shadow-brand-600/25 flex h-9 w-9 items-center justify-center rounded-xl shadow-lg">
-              <GraduationCap className="h-5 w-5 text-white" aria-hidden />
-            </div>
+            <BrandIcon />
             <div className="leading-tight">
               <p className="font-display text-[17px]">StudySync</p>
               <p className="text-subtle text-[11px]">Estudos organizados</p>

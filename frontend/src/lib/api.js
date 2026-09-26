@@ -101,6 +101,65 @@ async function refreshAccessToken() {
   }
 }
 
+/**
+ * Uma renovação por vez para o app inteiro: duas em paralelo reapresentariam
+ * o mesmo refresh token, e o backend trata isso como roubo (derruba todas as
+ * sessões).
+ */
+function sharedRefresh() {
+  refreshing =
+    refreshing ||
+    refreshAccessToken().finally(() => {
+      refreshing = null
+    })
+  return refreshing
+}
+
+function expireSession() {
+  tokenStore.clear()
+  onSessionExpired()
+}
+
+/**
+ * O servidor recusou o refresh (vencido, revogado, conta desativada)? Só
+ * isso encerra a sessão. Falha de rede ou 5xx — backend reiniciando, proxy
+ * sem upstream — é indisponibilidade: deslogar aí jogaria o usuário na tela
+ * de login toda vez que o servidor piscasse.
+ */
+export function isSessionRejected(error) {
+  return axios.isAxiosError(error) && [401, 403].includes(error.response?.status)
+}
+
+/** O access token vence em até `marginMs`? Token ilegível conta como vencido. */
+function isExpiring(token, marginMs = 60_000) {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    return !payload.exp || payload.exp * 1000 - marginMs < Date.now()
+  } catch {
+    return true
+  }
+}
+
+/**
+ * Access token válido para quem não passa pelo axios — o WebSocket, que só
+ * apresenta o token na conexão. Sem isso, um socket que cai depois de 30 min
+ * (notebook suspenso, servidor reiniciado) tentaria reconectar com o token
+ * vencido para sempre.
+ *
+ * Servidor indisponível só propaga o erro, para tentar de novo depois;
+ * refresh recusado encerra a sessão, como no axios.
+ */
+export async function getFreshAccessToken() {
+  const token = tokenStore.access
+  if (token && !isExpiring(token)) return token
+  try {
+    return await sharedRefresh()
+  } catch (error) {
+    if (isSessionRejected(error)) expireSession()
+    throw error
+  }
+}
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -116,19 +175,19 @@ api.interceptors.response.use(
 
     if (canRetry) {
       config._retried = true
+      let token
       try {
-        // Requisições simultâneas compartilham a mesma promessa de renovação.
-        refreshing = refreshing || refreshAccessToken().finally(() => {
-          refreshing = null
-        })
-        const token = await refreshing
-        config.headers.Authorization = `Bearer ${token}`
-        return api(config)
-      } catch {
-        tokenStore.clear()
-        onSessionExpired()
+        token = await sharedRefresh()
+      } catch (refreshError) {
+        if (!isSessionRejected(refreshError)) {
+          // Servidor indisponível: quem chamou vê a causa real, não o 401.
+          return Promise.reject(refreshError)
+        }
+        expireSession()
         return Promise.reject(error)
       }
+      config.headers.Authorization = `Bearer ${token}`
+      return api(config)
     }
 
     return Promise.reject(error)

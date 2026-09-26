@@ -63,7 +63,17 @@ class SaveSearchResultRequest(BaseModel):
     note_id: int | None = None
     schedule_id: int | None = None
 
-    @field_validator("title", "snippet", "source", "query")
+    @field_validator("title")
+    @classmethod
+    def _clean_title(cls, value: str) -> str:
+        # Obrigatório: um título só de marcação ficaria vazio e estouraria o
+        # NOT NULL do banco (500) em vez de um erro de validação.
+        cleaned = sanitize_text(value)
+        if not cleaned:
+            raise ValueError("O título do link não pode ficar vazio.")
+        return cleaned
+
+    @field_validator("snippet", "source", "query")
     @classmethod
     def _clean(cls, value: str | None) -> str | None:
         return sanitize_text(value) or None

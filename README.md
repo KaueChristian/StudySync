@@ -1,4 +1,6 @@
-# 📚 StudySync
+<img src="brand/studysync-icon.svg" width="64" alt="">
+
+# StudySync
 
 Aplicação para **gerenciar matérias, anotações e sessões de estudo**, com lembretes em
 tempo real e um motor de **busca de conteúdo de apoio na web** — sem custo de API externa.
@@ -215,6 +217,7 @@ workflow** gera os mesmos arquivos como artefato do workflow.
 
 ```
 StudySync/
+├── brand/                      # logo: SVGs e gerador do favicon e do ícone do .exe
 ├── backend/
 │   ├── alembic/                    # migrations versionadas
 │   │   └── versions/0001_esquema_inicial.py
@@ -229,8 +232,9 @@ StudySync/
 │   │   ├── services/               # scraper, notifier (WS), scheduler, tags
 │   │   ├── main.py                 # app FastAPI, CORS, middlewares, lifespan
 │   │   └── seed.py                 # dados de demonstração
+│   ├── tests/                      # pytest: API, lembretes, .ics, sanitização, busca
 │   ├── alembic.ini
-│   ├── requirements.txt
+│   ├── requirements.txt            # (+ requirements-dev.txt: pytest)
 │   └── run.py                      # servidor de desenvolvimento
 │
 └── frontend/
@@ -242,7 +246,7 @@ StudySync/
     │   │   ├── schedule/           # CalendarMonth, ScheduleModal, ScheduleCard
     │   │   ├── search/             # ContentSearchPanel
     │   │   ├── subjects/           # SubjectModal
-    │   │   └── ui/                 # Button, Field, Modal, ConfirmDialog, Misc
+    │   │   └── ui/                 # Button, Field, Modal, ConfirmDialog, Misc, Brand
     │   ├── context/                # Auth, Theme, Toast, Notification (WebSocket)
     │   ├── lib/                    # api (axios), services, format, constants
     │   ├── pages/                  # Login, Register, Dashboard, Subjects, Notes,
@@ -406,6 +410,11 @@ python -m app.seed                          # repopula os dados de demonstraçã
 alembic revision --autogenerate -m "msg"    # nova migration após alterar os modelos
 alembic upgrade head                        # aplica as migrations pendentes
 alembic downgrade -1                        # reverte uma revisão
+
+# Testes (dentro de backend/) — banco descartável, não toca no studysync.db
+pip install -r requirements-dev.txt         # instala o pytest
+python -m pytest                            # suíte completa (~20 s)
+STUDYSYNC_LIVE=1 python -m pytest tests/test_scraper.py   # + buscadores reais
 
 # Frontend (dentro de frontend/)
 npm run dev        # servidor de desenvolvimento

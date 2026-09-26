@@ -14,8 +14,8 @@
 
 1. **Leia [context_project.md](context_project.md) inteiro antes de tocar em qualquer
    código.** Ele é a fonte única de verdade sobre o que já existe, o que já foi corrigido, e
-   o que está deliberadamente pendente (ex.: logo/imagens — adiado pelo próprio autor, não
-   retomar sem sinal verde explícito).
+   o que está deliberadamente pendente (ex.: imagens por seção do menu — adiadas pelo
+   próprio autor, não retomar sem sinal verde explícito).
 2. **Não confie em revisão estática para declarar algo correto.** Este projeto já teve um
    caso concreto e documentado (`context_project.md` §3, "bug do Bing") de um defeito que
    passava por leitura de código, mas quebrava sempre que executado contra os provedores
@@ -84,10 +84,13 @@ Aplicar todos os passos relevantes para o tipo de mudança — nem toda mudança
       diff aplicado.
 
 ### 3.2 Regressão
-- [ ] **Não existe suíte automatizada de testes neste projeto ainda** (débito registrado em
-      `context_project.md` §6). Na ausência dela, rodar manualmente o roteiro mínimo de fumaça
-      abaixo sempre que a mudança tocar código compartilhado (auth, layout, contexto React,
-      `api.js`):
+- [ ] **Backend: rodar a suíte automatizada** (`backend/tests/`, criada em 2026-09-25) —
+      `venv\Scripts\python.exe -m pytest` dentro de `backend/`, banco descartável, ~20 s. Todo
+      bug corrigido no backend ganha um teste que o reproduz **antes** da correção. Mudança no
+      motor de busca roda também `STUDYSYNC_LIVE=1` (provedores reais — ver §3.3).
+- [ ] **Frontend: ainda não tem suíte automatizada** (`context_project.md` §6). Rodar
+      manualmente o roteiro mínimo de fumaça abaixo sempre que a mudança tocar código
+      compartilhado (auth, layout, contexto React, `api.js`):
       1. Login com a conta demo.
       2. Criar uma matéria.
       3. Criar uma sessão de estudo com lembrete ativado.

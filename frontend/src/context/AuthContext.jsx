@@ -7,7 +7,12 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 
-import { getErrorMessage, setSessionExpiredHandler, tokenStore } from '@/lib/api'
+import {
+  getErrorMessage,
+  isSessionRejected,
+  setSessionExpiredHandler,
+  tokenStore,
+} from '@/lib/api'
 import { IS_DESKTOP, requestLocalSession } from '@/lib/desktop'
 import { authService } from '@/lib/services'
 
@@ -19,10 +24,14 @@ export function AuthProvider({ children }) {
   // true, as rotas protegidas exibem o splash em vez de redirecionar ao login.
   const [loading, setLoading] = useState(true)
   const [sessionExpired, setSessionExpired] = useState(false)
+  // Servidor inalcançável durante a restauração: o splash avisa e tenta de novo.
+  const [offline, setOffline] = useState(false)
 
   // ------------------------------------------------------------- restauração
   useEffect(() => {
     let active = true
+    let retryTimer = null
+    let attempt = 0
 
     async function restore() {
       try {
@@ -35,17 +44,30 @@ export function AuthProvider({ children }) {
           tokenStore.save(data)
           if (active) setUser(data.user)
         }
-      } catch {
-        // O interceptor já tentou renovar; chegar aqui significa sessão morta.
+      } catch (error) {
+        if (!isSessionRejected(error) && tokenStore.access) {
+          // Servidor fora do ar (reiniciando, sem rede): a sessão pode estar
+          // ótima. Apagar os tokens aqui mandaria o usuário para o login toda
+          // vez que o backend piscasse.
+          if (active) {
+            setOffline(true)
+            attempt += 1
+            retryTimer = setTimeout(restore, Math.min(1000 * 2 ** (attempt - 1), 10_000))
+          }
+          return
+        }
         tokenStore.clear()
-      } finally {
-        if (active) setLoading(false)
+      }
+      if (active) {
+        setOffline(false)
+        setLoading(false)
       }
     }
 
     restore()
     return () => {
       active = false
+      clearTimeout(retryTimer)
     }
   }, [])
 
@@ -110,6 +132,7 @@ export function AuthProvider({ children }) {
     () => ({
       user,
       loading,
+      offline,
       sessionExpired,
       isAuthenticated: Boolean(user),
       login,
@@ -118,7 +141,7 @@ export function AuthProvider({ children }) {
       updateProfile,
       getErrorMessage,
     }),
-    [user, loading, sessionExpired, login, register, logout, updateProfile],
+    [user, loading, offline, sessionExpired, login, register, logout, updateProfile],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

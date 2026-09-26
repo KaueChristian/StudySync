@@ -20,7 +20,13 @@ import Button from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Misc'
 import { SubjectAvatar } from '@/components/ui/SubjectIcon'
 import { SCHEDULE_STATUS } from '@/lib/constants'
-import { formatDuration, formatRange, formatRelative, toDate } from '@/lib/format'
+import {
+  formatDuration,
+  formatRange,
+  formatRelative,
+  formatReminderLead,
+  toDate,
+} from '@/lib/format'
 import FocusTimer from './FocusTimer'
 
 export default function ScheduleCard({
@@ -113,14 +119,16 @@ export default function ScheduleCard({
                 className="flex items-center gap-1.5"
                 title={
                   schedule.reminder_enabled
-                    ? `Lembrete ${schedule.remind_minutes} min antes`
+                    ? `Lembrete ${formatReminderLead(schedule.remind_minutes)}`
                     : 'Lembrete desativado'
                 }
               >
                 {schedule.reminder_enabled ? (
                   <>
                     <Bell className="h-3.5 w-3.5" aria-hidden />
-                    {schedule.reminder_sent ? 'Lembrete enviado' : `${schedule.remind_minutes} min antes`}
+                    {schedule.reminder_sent
+                      ? 'Lembrete enviado'
+                      : formatReminderLead(schedule.remind_minutes)}
                   </>
                 ) : (
                   <>

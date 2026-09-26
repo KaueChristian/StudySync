@@ -6,20 +6,22 @@
  * restauração da sessão para não redirecionar por engano no primeiro render.
  */
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
-import { GraduationCap } from 'lucide-react'
-
 import { useAuth } from '@/context/AuthContext'
+import { BrandIcon } from '@/components/ui/Brand'
 import { Spinner } from '@/components/ui/Misc'
 import { IS_DESKTOP } from '@/lib/desktop'
 
 function Splash() {
+  const { offline } = useAuth()
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-4">
-      <div className="bg-brand-600 shadow-brand-600/25 flex h-14 w-14 items-center justify-center rounded-2xl shadow-lg">
-        <GraduationCap className="h-7 w-7 text-white" aria-hidden />
-      </div>
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
+      <BrandIcon className="h-14 w-14" />
       <Spinner className="h-5 w-5" />
-      <p className="text-muted text-sm">Carregando sua área de estudos…</p>
+      <p className="text-muted text-sm" role="status">
+        {offline
+          ? 'Sem conexão com o servidor. Tentando de novo…'
+          : 'Carregando sua área de estudos…'}
+      </p>
     </div>
   )
 }
@@ -28,9 +30,7 @@ function Splash() {
 function DesktopSessionError() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-6 text-center">
-      <div className="bg-brand-600 flex h-14 w-14 items-center justify-center rounded-2xl">
-        <GraduationCap className="h-7 w-7 text-white" aria-hidden />
-      </div>
+      <BrandIcon className="h-14 w-14" />
       <p className="font-semibold">Não foi possível abrir sua área de estudos.</p>
       <p className="text-muted text-sm">Feche e abra o StudySync novamente.</p>
     </div>

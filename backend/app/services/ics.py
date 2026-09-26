@@ -28,20 +28,24 @@ def _escape(text: str) -> str:
 
 
 def _fold(line: str) -> str:
-    """Quebra uma linha em continuações de até 75 octetos, como exige o RFC."""
-    data = line.encode("utf-8")
-    if len(data) <= 75:
-        return line
+    """
+    Quebra uma linha em continuações de até 75 octetos, como exige o RFC.
 
-    parts = []
-    chunk = data[:75]
-    parts.append(chunk.decode("utf-8", errors="ignore"))
-    rest = data[len(parts[0].encode("utf-8")):]
-    while rest:
-        chunk = rest[:74]
-        parts.append(" " + chunk.decode("utf-8", errors="ignore"))
-        rest = rest[len(chunk):]
-    return "\r\n".join(parts)
+    O corte recua até o início de um caractere: cortar no meio de um
+    caractere UTF-8 de 3 ou 4 bytes ("—", emoji) o faria sumir do arquivo.
+    """
+    data = line.encode("utf-8")
+    parts: list[str] = []
+    limit = 75
+    while len(data) > limit:
+        cut = limit
+        while cut > 0 and (data[cut] & 0xC0) == 0x80:  # byte de continuação
+            cut -= 1
+        parts.append(data[:cut].decode("utf-8"))
+        data = data[cut:]
+        limit = 74  # a continuação começa com um espaço
+    parts.append(data.decode("utf-8"))
+    return "\r\n ".join(parts)
 
 
 def _format_dt(value: datetime) -> str:
