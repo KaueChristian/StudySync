@@ -1,3 +1,19 @@
+## Novidades da 1.1.0
+
+- **Identidade própria:** logo novo (monograma "S") no app, no ícone do programa, na barra
+  de tarefas, no instalador e nas notificações.
+- **Lembretes mais confiáveis:** os avisos em tempo real voltam a chegar depois que o
+  computador acorda da suspensão; reabrir uma sessão concluída reativa o lembrete; o texto
+  diz a antecedência certa ("na hora exata", "1 dia antes").
+- **Seu texto fica como você escreveu:** títulos e anotações com `&`, `<`, `>` e citações
+  (`> texto`) não são mais alterados ao salvar.
+- **Agenda:** "Nova sessão" à noite não sugere mais um horário que já passou; sessões
+  semanais mantêm o horário na troca de horário de verão; exportação `.ics` preserva todos
+  os caracteres.
+- **Busca de conteúdo:** os resultados mostrados são sempre os da sua última busca.
+- Painel com opção "Tentar de novo" quando não consegue carregar, e resumos de anotações
+  sem trechos cortados.
+
 ## Download (Windows 10/11, 64 bits)
 
 | Arquivo | Para quem |
