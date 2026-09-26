@@ -16,7 +16,7 @@ import { useToast } from '@/context/ToastContext'
 function notifyNative(title, body) {
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
   try {
-    new Notification(title, { body, tag: 'studysync-focus-timer' })
+    new Notification(title, { body, tag: 'studysync-focus-timer', icon: '/icon-192.png' })
   } catch {
     // Alguns navegadores bloqueiam o construtor fora de um service worker.
   }

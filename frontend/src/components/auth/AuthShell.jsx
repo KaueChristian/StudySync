@@ -1,6 +1,8 @@
 /** Moldura compartilhada pelas telas de login e cadastro. */
 import { Link } from 'react-router-dom'
-import { BellRing, CalendarCheck, GraduationCap, Search } from 'lucide-react'
+import { BellRing, CalendarCheck, Search } from 'lucide-react'
+
+import { BrandIcon } from '@/components/ui/Brand'
 
 const HIGHLIGHTS = [
   {
@@ -36,9 +38,7 @@ export default function AuthShell({ title, subtitle, children, footer }) {
         />
 
         <div className="relative flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 backdrop-blur">
-            <GraduationCap className="h-6 w-6 text-white" aria-hidden />
-          </div>
+          <BrandIcon className="h-11 w-11" inverse />
           <span className="font-display text-xl text-white">StudySync</span>
         </div>
 
@@ -75,9 +75,7 @@ export default function AuthShell({ title, subtitle, children, footer }) {
       <main className="flex w-full flex-col justify-center px-6 py-12 sm:px-12 lg:w-1/2 xl:w-[45%]">
         <div className="mx-auto w-full max-w-sm">
           <Link to="/login" className="mb-8 flex items-center gap-2.5 lg:hidden">
-            <div className="bg-brand-600 flex h-10 w-10 items-center justify-center rounded-xl">
-              <GraduationCap className="h-5 w-5 text-white" aria-hidden />
-            </div>
+            <BrandIcon className="h-10 w-10" />
             <span className="font-display text-lg">StudySync</span>
           </Link>
 

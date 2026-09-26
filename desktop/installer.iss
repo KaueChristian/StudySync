@@ -37,6 +37,7 @@ LicenseFile=..\LICENSE
 OutputDir=release
 OutputBaseFilename=StudySync-Setup-{#AppVersion}
 UninstallDisplayIcon={app}\StudySync.exe
+SetupIconFile=StudySync.ico
 UninstallDisplayName=StudySync
 Compression=lzma2
 SolidCompression=yes
