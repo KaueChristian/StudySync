@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, tzinfo
+from datetime import timezone as dt_timezone
 from typing import TYPE_CHECKING
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import Boolean, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -76,6 +78,14 @@ class User(Base):
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
         back_populates="user", cascade="all, delete-orphan", passive_deletes=True
     )
+
+    @property
+    def zone(self) -> tzinfo:
+        """Fuso do usuário para cálculos de calendário (UTC se inválido)."""
+        try:
+            return ZoneInfo(self.timezone or "America/Sao_Paulo")
+        except (ZoneInfoNotFoundError, ValueError):
+            return dt_timezone.utc
 
     def __repr__(self) -> str:  # pragma: no cover - auxílio de depuração
         return f"<User id={self.id} email={self.email!r}>"

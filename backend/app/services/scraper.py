@@ -583,7 +583,12 @@ async def _fetch_wikipedia(client: httpx.AsyncClient, query: str) -> list[RawRes
         raw_snippet = item.get("snippet", "")
         # A API devolve o snippet com marcação <span class="searchmatch">.
         snippet = BeautifulSoup(raw_snippet, "html.parser").get_text(" ", strip=True)
-        slug = title.replace(" ", "_")
+        # Só escapa o que quebraria a URL ("?" viraria query, "%" um escape
+        # inválido); acentos ficam legíveis, como nos links já salvos.
+        slug = (
+            title.replace("%", "%25").replace("?", "%3F").replace("#", "%23")
+            .replace(" ", "_")
+        )
         results.append(
             RawResult(
                 title=title,

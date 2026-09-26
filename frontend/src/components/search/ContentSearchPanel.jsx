@@ -12,7 +12,7 @@
  *   - savedLinks   : links já anexados (evita duplicar e permite remover)
  *   - onSaved / onRemoved : callbacks para o componente pai ressincronizar
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   BookmarkPlus,
   Check,
@@ -59,6 +59,11 @@ export default function ContentSearchPanel({
   // URLs já salvas — usadas para marcar o botão como "salvo".
   const savedUrls = new Set(savedLinks.map((link) => link.url))
 
+  // Só a busca mais recente pode preencher a lista: a busca automática (lenta
+  // quando a cascata de provedores cai no fallback) chegaria depois de uma
+  // busca feita pelo usuário e sobrescreveria os resultados dela.
+  const latestSearch = useRef(0)
+
   useEffect(() => {
     setQuery(defaultQuery)
   }, [defaultQuery])
@@ -71,6 +76,7 @@ export default function ContentSearchPanel({
         return
       }
 
+      const searchId = ++latestSearch.current
       setLoading(true)
       setError('')
       try {
@@ -78,14 +84,16 @@ export default function ContentSearchPanel({
           { query: value, limit: 5, subject_hint: subjectHint || null },
           refresh,
         )
+        if (searchId !== latestSearch.current) return
         setResults(data.results)
         setMeta({ provider: data.provider, cached: data.cached, took: data.took_ms, query: data.query })
         if (!data.results.length) setError('Nenhum resultado encontrado. Tente outros termos.')
       } catch (err) {
+        if (searchId !== latestSearch.current) return
         setError(getErrorMessage(err, 'A busca falhou.'))
         setResults([])
       } finally {
-        setLoading(false)
+        if (searchId === latestSearch.current) setLoading(false)
       }
     },
     [subjectHint],

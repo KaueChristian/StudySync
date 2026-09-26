@@ -20,7 +20,9 @@ _HAS_DIGIT = re.compile(r"\d")
 def validate_timezone_name(value: str) -> str:
     """Valida se a string corresponde a um fuso IANA reconhecido ou UTC."""
     tz = value.strip()
-    if tz not in available_timezones() and tz.upper() != "UTC":
+    if tz.upper() == "UTC":
+        return "UTC"  # grafia canônica: "utc" não é um nome IANA
+    if tz not in available_timezones():
         raise ValueError("Fuso horário inválido. Informe um fuso IANA (ex.: 'America/Sao_Paulo' ou 'UTC').")
     return tz
 

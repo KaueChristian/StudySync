@@ -52,6 +52,20 @@ def get_owned_schedule(db: DbSession, owner_id: int, schedule_id: int) -> Schedu
     return schedule
 
 
+def _sync_reminder(schedule: Schedule) -> None:
+    """
+    Decide se o lembrete ainda deve disparar.
+
+    Concluída ou cancelada não lembra. Pendente (inclusive reaberta) lembra se
+    o horário do lembrete ainda não passou — nunca retroativamente.
+    """
+    if schedule.status != ScheduleStatus.PENDING:
+        schedule.reminder_sent = True
+        return
+    remind_at = ensure_utc(schedule.remind_at)
+    schedule.reminder_sent = bool(remind_at and remind_at < datetime.now(timezone.utc))
+
+
 def _validate_subject(db: DbSession, owner_id: int, subject_id: int | None) -> None:
     if subject_id is None:
         return
@@ -239,9 +253,14 @@ def create_schedule(
     db.add(first)
 
     if payload.repeat_weekly:
-        cursor_start = payload.start_at + timedelta(weeks=1)
-        instances = 1
-        while cursor_start <= payload.repeat_until and instances < MAX_RECURRENCE_INSTANCES:
+        # "Mesmo horário" é no relógio do usuário: somar 7 dias ao horário
+        # local (e não em UTC) mantém as 14h depois da troca de horário de
+        # verão. A duração continua absoluta.
+        first_local = payload.start_at.astimezone(current_user.zone)
+        for week in range(1, MAX_RECURRENCE_INSTANCES):
+            cursor_start = (first_local + timedelta(weeks=week)).astimezone(timezone.utc)
+            if cursor_start > payload.repeat_until:
+                break
             db.add(
                 _build_schedule(
                     current_user.id,
@@ -251,8 +270,6 @@ def create_schedule(
                     recurrence_group_id,
                 )
             )
-            cursor_start += timedelta(weeks=1)
-            instances += 1
 
     db.commit()
     db.refresh(first)
@@ -295,13 +312,13 @@ def update_schedule(
     if start_at and end_at:
         if end_at <= start_at:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="O horário de término deve ser posterior ao de início.",
             )
         duration = (end_at - start_at).total_seconds() / 3600
         if duration > MAX_DURATION_HOURS:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=f"A sessão não pode ultrapassar {MAX_DURATION_HOURS} horas.",
             )
 
@@ -309,10 +326,9 @@ def update_schedule(
         schedule.remind_at = compute_remind_at(
             schedule.start_at, schedule.remind_minutes, schedule.reminder_enabled
         )
-        # Reagendar reabre o lembrete, desde que ele ainda esteja no futuro.
-        schedule.reminder_sent = bool(
-            schedule.remind_at and schedule.remind_at < datetime.now(timezone.utc)
-        )
+    # Reagendar ou reabrir rearma o lembrete; concluir ou cancelar silencia.
+    if (REMINDER_FIELDS | {"status"}) & data.keys():
+        _sync_reminder(schedule)
 
     schedule.updated_at = datetime.now(timezone.utc)
     db.add(schedule)
@@ -334,10 +350,7 @@ def update_status(
 ) -> ScheduleRead:
     schedule = get_owned_schedule(db, current_user.id, schedule_id)
     schedule.status = payload.status
-
-    # Concluir ou cancelar silencia o lembrete ainda não disparado.
-    if payload.status in (ScheduleStatus.COMPLETED, ScheduleStatus.CANCELED):
-        schedule.reminder_sent = True
+    _sync_reminder(schedule)
 
     schedule.updated_at = datetime.now(timezone.utc)
     db.add(schedule)

@@ -50,6 +50,9 @@ solo, diário.
   linguagem de cantos **retos** (não a bolha arredondada padrão de templates SaaS) — ver
   decisão de 2026-09-01 sobre os botões em §7, que é a correção mais recente dessa
   identidade.
+- **Logo: monograma "S"** (decidido em 2026-09-25, ver §7): bojo de cima curvo (ciclo de
+  foco), de baixo reto (célula da agenda), em papel sobre bloco verde-tinta. Fonte única da
+  geometria em `brand/build.py`; regras de uso em `brand/README.md`.
 
 ---
 
@@ -99,6 +102,59 @@ implementado · 🚫 Bug confirmado (corrigido ou não)
 |---|---|---|
 | Paleta/tipografia (papel quente, serifa `Fraunces` nos títulos, verde-tinta `--color-brand-*`) | ✅ | `index.css` reescrito; validado visualmente em várias telas (login, dashboard, matérias, agenda) em modo claro e escuro |
 | **Correção da linguagem de forma (2026-09-01, feedback direto do autor)** | ✅ | O autor apontou que os botões arredondados quebravam a estética de "caderno". Causa: todo o app usa as classes padrão do Tailwind (`rounded-lg`/`xl`/`2xl`) — corrigido **no nível do token**, redefinindo `--radius-*` inteiro em `@theme` (de 8–16px para 1–6px), o que se propagou sozinho para botões, inputs, modais e calendário sem editar cada componente. Badges/chips em pílula (`rounded-full`) trocados manualmente para o mesmo raio retangular, já que não são cobertos pela escala numérica do Tailwind. Validado visualmente: dashboard, matérias, agenda (calendário com células quadradas), modal de nova sessão |
+
+### Logo e ícone do app (2026-09-25) — roadmap item 2, parte do logo
+
+Pedido do autor (sinal verde para o item 2, antes adiado): logo original para o sistema e
+para o ícone do `.exe`, na linguagem de caderno, legível em monocromia a 16–32 px, sem
+repetir o calendário com números. Três conceitos apresentados com preview (§7); o autor
+escolheu o **Monograma S**.
+
+| Item | Status | Evidência |
+|---|---|---|
+| Gerador único (`brand/build.py`, só biblioteca padrão) | ✅ | Gera `brand/studysync-{mark,icon}.svg`, `frontend/public/favicon.{svg,ico}`, `icon-192.png` e `desktop/StudySync.ico` em ~2 s. `.ico` decodificado de volta entrada por entrada: 9 tamanhos (16, 20, 24, 32, 40, 48, 64 em BMP 32 bpp; 128 e 256 em PNG), todos na orientação certa; a 16 px todas as bordas retas caem em pixel inteiro (conferido ampliado, comparado com terminais em 25/7 e 26/6, que borram ou fecham o S) |
+| Interface: sidebar, login (normal e invertido sobre o painel verde), splash e erro do desktop | ✅ | `BrandIcon`/`BrandMark` em `components/ui/Brand.jsx` substituem o capelo (`GraduationCap`) com sombra colorida. Visto no navegador (Vite + backend reais) nos temas claro e escuro, login estreito e largo; valores computados do bloco: fundo `rgb(58, 99, 52)`, S `rgb(255, 253, 248)`, raio 2px, 36×36 |
+| Favicon e ícone das notificações | ✅ | `/favicon.svg`, `/favicon.ico` e `/icon-192.png` → 200 com `image/svg+xml`, `image/x-icon`, `image/png` no Vite **e** servidos pelo backend no `.exe` (`127.0.0.1:8765`). O `icon: '/vite.svg'` quebrado de `NotificationContext.jsx` virou `/icon-192.png`; `FocusTimer.jsx` passou a usar o mesmo ícone |
+| Ícone do `.exe`, da janela e do instalador | ✅ | `desktop\release.ps1 -Version 1.0.0` completo (build, Inno Setup com `SetupIconFile`, zip) sem erro. Ícone extraído de `StudySync.exe` e de `StudySync-Setup-1.0.0.exe`: o S, pixel central `#fffdf8` e canto `#3a6334`. App aberto com `LOCALAPPDATA` descartável: `WM_GETICON` da janela devolve o S, e a captura da janela real (`PrintWindow`) mostra o S na barra de título e o bloco na sidebar. Fechada pelo "X": processo saiu em 5 s, porta 8765 livre. O pywebview pega o ícone do próprio `.exe` — o launcher não precisou mudar |
+| Regressão | ✅ | `npm run lint`: 0 erros (os mesmos 8 avisos); `npm run build` OK; conta demo entra e o painel carrega; tema alternado pelo botão do app. `%LOCALAPPDATA%\StudySync` real intocado (última escrita em 13/09) |
+
+### Bateria de testes com suíte versionada (2026-09-25) — 15 bugs encontrados e corrigidos
+
+Pedido do autor: teste completo em busca de bugs, corrigindo com causa raiz (método de
+depuração sistemática: reproduzir → hipótese → teste que falha → correção → teste que passa).
+Pela primeira vez os testes **ficaram no repositório**: `backend/tests/` (pytest, banco
+descartável criado pelas migrations do boot, agendador desligado e lembretes disparados
+chamando `scan_reminders()` direto). **151 testes passando** (+4 ao vivo, opcionais com
+`STUDYSYNC_LIVE=1`, que também passaram contra DuckDuckGo, Bing e Wikipédia reais). O
+frontend foi testado no navegador real (Vite + backend) e no `.exe` rebuildado, inspecionado
+pela depuração remota do WebView2.
+
+| # | Bug | Causa raiz | Evidência (antes → depois) |
+|---|---|---|---|
+| 1 | **Texto corrompido ao salvar**: `P&D` → `P&amp;D`, `x < 5` → `x &lt; 5`; no Markdown a citação `> texto` virava `&gt; texto` (deixava de ser citação) e o código perdia `<`, `>`, `&` | `sanitize_text`/`sanitize_html` usavam `bleach.clean`, que escapa o texto para HTML — mas os campos são texto puro e Markdown, exibidos pelo React como texto | 16 testes falhando → passando. `core/sanitize.py`: texto puro remove só o que parece tag; Markdown passa só as tags pelo bleach (texto vira marcador e volta intacto), repetindo até estabilizar (pega `<<b>script>`). 21 payloads de XSS continuam neutralizados nas duas funções. Na interface: citação vira `<blockquote>`, código mantém `a < b && c > d`, editor mostra o texto como digitado. **Dados existentes:** banco de dev e banco real do desktop sem nenhum campo afetado (contagem só-leitura) → sem migração |
+| 2 | Exportação `.ics` perdia caracteres de 3–4 bytes ("—", "€", emoji) em descrições longas | `_fold` avançava 74 bytes mesmo quando o corte caía no meio de um caractere e a decodificação o descartava | Teste com 6 tipos de caractere: emoji perdia 5 → 0; `_fold` recua o corte até o início do caractere |
+| 3 | Lembrete dizia "começa em 14 minutos" para antecedência de 15 | `minutes_left` truncava (`//`) e a varredura roda até 30 s depois | Teste com 14min50s: "em 14" → "em 15"; arredonda para o minuto mais próximo |
+| 4 | Sessão recorrente mudava de horário local na troca de horário de verão (14h → 13h em Nova York depois de 01/11) | Recorrência somava 7 dias em UTC | Teste com `America/New_York`: `[14,13,13,13]` → `[14,14,14,14]`; soma semanas no relógio do fuso do usuário (`User.zone`) |
+| 5 | Reabrir sessão concluída/cancelada deixava o lembrete silenciado para sempre; concluir pelo `PATCH` genérico não silenciava | Só `/status` com concluída/cancelada mexia em `reminder_sent`; reabrir não recalculava | 2 testes falhando → passando; `_sync_reminder` único para as duas rotas (nunca lembra retroativamente). Na interface: concluir → reabrir mostra "na hora exata" em vez de "Lembrete enviado" |
+| 6 | `POST /search/save` com título só de marcação (`<b></b>`) → **500** (`NOT NULL constraint failed`) | Validador compartilhado devolvia `None` para o campo obrigatório | 500 → 422 com mensagem |
+| 7 | Fuso "utc" aceito, mas gravado em minúsculas | Validação comparava em maiúsculas e devolvia o valor cru | Grava `UTC` |
+| 8 | Link da Wikipédia (rede de segurança da busca) quebrado para título com `?` ou `%` | URL montada com o título cru: `?` virava query, `%` escape inválido | Teste com transporte simulado; URL corrigida abre na Wikipédia real (200). Acentos continuam crus, como nos links já salvos |
+| 9 | "Você será avisado 0 minutos antes" / "1440 min antes" (toast e card) | Texto montado com o número bruto de minutos | `formatReminderLead`: "na hora exata", "1 hora antes", "1 dia antes". Visto no toast e no card reais |
+| 10 | **Lembretes paravam de chegar em tempo real** depois de o socket cair com o access token vencido (30 min): reconexão com o mesmo token, 401 para sempre | O token só era renovado pelo interceptor HTTP; o WebSocket lia o token direto do `localStorage` | Reproduzido: 5 handshakes 401 seguidos no log do servidor. Depois: `getFreshAccessToken()` renova antes de conectar (promessa compartilhada com o interceptor — nunca dois refresh em paralelo, o que acionaria a detecção de reuso). Com o servidor fora: nenhum socket com token vencido, usuário continua logado; servidor de volta: 1 refresh 200 + socket aceito. Refresh recusado: 1 refresh 401 → login |
+| 11 | Abrir/recarregar a página com o backend fora do ar **apagava a sessão** e mandava para o login | `AuthContext.restore` limpava os tokens em qualquer erro; o interceptor também deslogava em qualquer falha do refresh | Reproduzido. Só 401/403 do refresh encerra a sessão (`isSessionRejected`); indisponibilidade mantém o splash "Sem conexão com o servidor. Tentando de novo…" e recupera sozinho quando o backend volta. **Achado no caminho:** a primeira versão da correção do #10 deslogava com o 500 que o proxy devolve quando o backend está fora — pego no teste, corrigido na mesma regra |
+| 12 | Painel em branco (sem saída) quando a carga falhava | `if (!data) return null` | Estado de erro com "Tentar de novo"; testado derrubando o backend e religando |
+| 13 | Resumo das anotações (listagem e painel) apagava código inline e pontuação: "Se `a < b` então" → "Se então"; "Bem-vindo (de novo)!" → "Bem vindo de novo"; URL dos links aparecia | Regex apagava `` `...` `` inteiro e todo `-()!`; duplicado em `notes.py` e `dashboard.py` | `services/excerpt.py` compartilhado, 11 casos de teste; card real mostra o texto inteiro |
+| 14 | "Nova sessão" depois das 19h sugeria início **no passado** (hoje 19:00) — e a sessão nascia sem lembrete | Modal sempre usava 19:00 do dia selecionado (hoje, por padrão) | Às 22h11 sugeria 19:00 → agora 23:15 (próxima hora cheia); dia futuro clicado continua 19:00 |
+| 15 | Busca de conteúdo mostrava resultados de **outra** consulta (a busca automática ao abrir a aba chegava depois e sobrescrevia a do usuário) | Resposta mais lenta vencia, sem checar se ainda era a busca mais recente | Log do servidor: automática terminou 1 s depois da do usuário; tela mostrava a errada → agora mostra a do usuário (corrida forçada de propósito e confirmada no log) |
+
+Também: `HTTP_422_UNPROCESSABLE_ENTITY` (obsoleto no Starlette instalado) trocado por
+`HTTP_422_UNPROCESSABLE_CONTENT` — os requisitos só fixam versão mínima, e a remoção da
+constante derrubaria as rotas com `AttributeError`.
+
+**Descartados na investigação (não eram bugs):** "Antecedência" ausente da árvore de
+acessibilidade (limitação da ferramenta — o select tem rótulo); token do WebSocket em log
+(o desktop roda com `access_log=False`, log vazio); o `useAuth precisa estar dentro de
+<AuthProvider>` no console é artefato do hot reload do Vite ao editar contextos.
 
 ### Motor de busca — bug encontrado e corrigido (2026-09-01, relatado pelo autor após uso real)
 
@@ -219,7 +275,7 @@ durante o teste para inspecionar a janela real.
 | **Release local** (`desktop\release.ps1 -Version 1.0.0`, o mesmo que a CI roda) | ✅ | Gerou `StudySync-Setup-1.0.0.exe` (23,1 MB), `StudySync-1.0.0-win64.zip` (27,1 MB) e `SHA256SUMS.txt` (sem BOM, LF, hashes conferidos com `Get-FileHash`). Caminho de falha: `-Version 9.9.9` com o código em `1.0.0` aborta com "A tag pede a versão 9.9.9, mas o código declara 1.0.0" |
 | Instalador (Inno Setup, instalado em pasta descartável, modo silencioso) | ✅ | Instalação exit 0 com `StudySync.exe` e `unins000.exe`; atalho no Menu Iniciar e entrada "StudySync 1.0.0 / Kaue Christian" em Programas instalados (HKCU); app instalado subiu (`/health` ok). **Atualizar com o app aberto** foi recusado (exit 1, "O Instalador detectou que o StudySync está atualmente em execução"); com o app fechado, exit 0 e banco com o mesmo hash. Desinstalação exit 0: pasta, `_internal`, atalho e registro removidos; `studysync.db` e `secret.key` preservados |
 | Zip portátil | ✅ | Extraído: a raiz do zip é a pasta `StudySync\` com o `.exe` dentro; o app subiu direto dela e fechou liberando a porta |
-| Workflow do GitHub Actions (`.github/workflows/release.yml`) | ✅ Execução manual | Execução #1 pelo autor em 2026-09-13 ("Run workflow" na `main`, commit `0754ab4`, merge do PR #1): **Success** em 2m26s, 1 artefato. O autor baixou o artefato, instalou e usou o app: tudo funcionou, **exceto as notificações do sistema** (ver a linha abaixo). O caminho por tag (Release em rascunho) ainda não rodou |
+| Workflow do GitHub Actions (`.github/workflows/release.yml`) | ✅ Execução manual | Execução #1 pelo autor em 2026-09-13 ("Run workflow" na `main`, commit `0754ab4`, merge do PR #1): **Success** em 2m26s, 1 artefato. O autor baixou o artefato, instalou e usou o app: tudo funcionou, **exceto as notificações do sistema** (ver a linha abaixo). O caminho por tag rodou na v1.0.0 (2026-09-14) e na v1.1.0 |
 | 🚫→✅ **Notificações do sistema bloqueadas no desktop** (relatado pelo autor com o build da CI) | ✅ Corrigido | **Causa:** sem handler de `PermissionRequested`, o WebView2 responde `denied` na hora a `Notification.requestPermission()`, sem mostrar pergunta (reproduzido: `default` → `denied`), e o pywebview não registra handler. **Agravante:** o `denied` fica salvo no perfil (reproduzido: perfil do build antigo reaberto com o handler novo continuou `denied`, e `requestPermission()` também, sem disparar o evento). **Correção** (`desktop/launcher.py`, `allow_notification_permission`): no primeiro `loaded`, o launcher registra o handler (aprova só `Notifications`) e grava `Allow` para a origem do app com `CoreWebView2Profile.SetPermissionStateAsync`, sobrescrevendo o `denied` antigo. **Validação:** perfil com `denied` salvo pelo build antigo → `granted` e Configurações exibindo "Ativadas"; perfil novo → `granted` na primeira abertura; permissão mantida ao fechar e reabrir; `new Notification()` disparou `onshow` e o aviso apareceu na área de notificações do Windows (captura de tela); **lembrete real** de sessão com a janela minimizada virou aviso do Windows ("Lembrete: Revisão de Biologia / Sua sessão de estudo começa agora") e o sino marcou não lida; repetido no `.exe` empacotado com um perfil em que o bloqueio foi gravado à mão (`setting: 2` em `Preferences`) → `granted` e `onshow` |
 | Download do `.ics` e abertura de links externos pela janela | 🟡 Configurado, não exercitado | `ALLOW_DOWNLOADS` e `OPEN_EXTERNAL_LINKS_IN_BROWSER` ligados no launcher, mas não cliquei neles no teste (gravaria em Downloads / abriria o navegador da máquina). Verificar na primeira execução manual |
 
@@ -248,11 +304,16 @@ backend/
       scheduler.py                — APScheduler: varredura de lembretes, purga de tokens
       notifier.py                 — gerenciador de conexões WebSocket
       ics.py                      — gerador manual de iCalendar (RFC 5545)
+      excerpt.py                  — resumo em texto puro do Markdown (listagem e painel)
       tags.py
       sessions.py                 — emissão do par de tokens (rotas de auth) + sessão do usuário
                                     local do desktop (`issue_local_session`)
     seed.py                       — dados de demonstração (conta demo@studysync.dev)
+  tests/                          — pytest (2026-09-25): conftest cria banco descartável pelas
+                                    migrations; `test_scraper.py` tem testes ao vivo opcionais
+                                    (STUDYSYNC_LIVE=1)
   requirements.txt
+  requirements-dev.txt            — pytest (fora do pacote do app)
   run.py
 
 frontend/
@@ -266,7 +327,8 @@ frontend/
       search/      — ContentSearchPanel (reutilizado em notas, sessões e na página de busca)
       subjects/    — SubjectModal
       ui/          — Button, Field, Modal, ConfirmDialog, Misc (Badge/EmptyState/Toggle/...),
-                     SubjectIcon
+                     SubjectIcon, Brand (logo: `BrandIcon` / `BrandMark`)
+    public/        — favicon.svg, favicon.ico, icon-192.png (gerados por brand/build.py)
     context/       — Auth, Theme, Toast, Notification (WebSocket + notificação nativa)
     lib/           — api.js (axios + refresh automático), services.js, format.js, constants.js,
                      desktop.js (`IS_DESKTOP` pelo build `VITE_DESKTOP=true` + ponte do pywebview)
@@ -276,7 +338,11 @@ frontend/
                      tipografia (`--font-sans`/`--font-display`), superfícies (`.card`)
   vite.config.js   — proxy `/api` → `http://127.0.0.1:8000` em dev
 
+brand/                            — logo: build.py (geometria única → SVG, PNG, ICO, só stdlib),
+                                    studysync-icon.svg, studysync-mark.svg, README.md (regras)
+
 desktop/                          — empacotamento Windows (roadmap item 3, rota a)
+  StudySync.ico                   — ícone do .exe/janela/instalador (gerado por brand/build.py)
   launcher.py                     — entrada do .exe: instância única, dados em %LOCALAPPDATA%\StudySync,
                                     uvicorn numa thread em 127.0.0.1:8765 + janela pywebview (WebView2)
   StudySync.spec                  — PyInstaller (modo pasta): app/, alembic/ como arquivos, frontend/dist
@@ -312,21 +378,27 @@ raio fixo, para que futuras mudanças de identidade visual continuem sendo de ba
 |---|---|---|---|---|
 | 0 | **Corrigir o `Accept-Encoding: br` antes de qualquer outra coisa** (`scraper.py:78`) | Nada | ✅ Concluído | Removido `br` do cabeçalho em `scraper.py:80`. Revalidado ao vivo contra Bing (10/10 com URLs limpas), DDG (10/10) e pipeline completo (5 links ranqueados). |
 | 1 | Commitar a correção do `scraper.py` (bug do Bing + anti-bloqueio) | Item 0 | ✅ Concluído | Validado de acordo com o `VALIDATION_PROTOCOL.md` §3.3 e commitado. |
-| 2 | Logo e imagens próprias por seção/opção do menu | Nada | ❌ Adiado pelo autor | O autor pediu explicitamente para não avançar nisso ainda ("preciso refinar mais algumas coisas") — não iniciar sem sinal verde |
-| 3 | Empacotamento desktop (dados 100% locais, sem depender de hospedagem) | Redesign visual (✅) | ✅ Concluído (2026-09-13, rota a) | Implementado em `desktop/` e validado com o `.exe` real (§3, "Empacotamento desktop"). Pendências conhecidas em §6: sem ícone próprio (depende do item 2), sem instalador nem assinatura de código, lembretes só com o app aberto. Rotas avaliadas originalmente com o autor: **(a)** PyInstaller (backend inteiro + frontend buildado servido pelo FastAPI) + `pywebview` (janela nativa via WebView2, sem Chromium embutido) — caminho mais simples, recomendado; **(b)** Tauri com o mesmo `.exe` do PyInstaller como sidecar — instalador mais "profissional", mais setup (toolchain Rust). Eletron foi descartado — exigiria ou reescrever o backend em Node ou rodar o mesmo sidecar Python com ~150MB+ de Chromium embutido, sem ganho real sobre as outras duas opções |
-| 4 | Suíte de testes automatizados (backend e frontend) | Nada | ❌ Não existe | Ver débito técnico em §6 — toda validação até agora foi manual/ao vivo, não há rede de segurança automatizada |
-| 5 | Distribuição pelo GitHub Releases (instalador + zip) e app desktop sem login | Item 3 | 🟡 Workflow manual OK e build da CI usado pelo autor; falta a tag | Decisões em §7 (2026-09-13). Mergeado na `main` (PR #1; correção das notificações no PR #2, execução manual #2 do workflow com sucesso). Para publicar: tag `v1.0.0` e revisar o rascunho do Release |
+| 2 | Logo e imagens próprias por seção/opção do menu | Nada | 🟡 Logo concluído (2026-09-25); imagens por seção não iniciadas | O logo (monograma S) está no app, no favicon, nas notificações e no `.exe`/instalador (§3). As **imagens por seção/opção do menu** continuam sem sinal verde do autor — não iniciar sem pedido explícito |
+| 3 | Empacotamento desktop (dados 100% locais, sem depender de hospedagem) | Redesign visual (✅) | ✅ Concluído (2026-09-13, rota a) | Implementado em `desktop/` e validado com o `.exe` real (§3, "Empacotamento desktop"). Pendências conhecidas em §6: sem assinatura de código (ícone próprio resolvido em 2026-09-25; instalador em 2026-09-13), lembretes só com o app aberto. Rotas avaliadas originalmente com o autor: **(a)** PyInstaller (backend inteiro + frontend buildado servido pelo FastAPI) + `pywebview` (janela nativa via WebView2, sem Chromium embutido) — caminho mais simples, recomendado; **(b)** Tauri com o mesmo `.exe` do PyInstaller como sidecar — instalador mais "profissional", mais setup (toolchain Rust). Eletron foi descartado — exigiria ou reescrever o backend em Node ou rodar o mesmo sidecar Python com ~150MB+ de Chromium embutido, sem ganho real sobre as outras duas opções |
+| 4 | Suíte de testes automatizados (backend e frontend) | Nada | 🟡 Backend feito (2026-09-25); frontend não | `backend/tests/`: 151 testes (API, isolamento, JWT, lembretes + WebSocket, recorrência, `.ics`, sanitização/XSS, motor de busca offline + ao vivo opcional). Frontend segue só com validação manual no navegador — os bugs 10–15 de 2026-09-25 (sessão, WebSocket, corrida na busca) seriam o primeiro alvo de testes de componente |
+| 5 | Distribuição pelo GitHub Releases (instalador + zip) e app desktop sem login | Item 3 | ✅ v1.0.0 publicada (2026-09-14); v1.1.0 em 2026-09-25 | Decisões em §7 (2026-09-13). v1.0.0: tag no merge do PR #3, workflow por tag com sucesso (2m20s), Release publicado. v1.1.0: logo + as 15 correções de 2026-09-25 (§8). Para a próxima: subir a versão em `config.py`, `package.json` e `package-lock.json`, atualizar "Novidades" em `desktop/release-notes.md`, tag `vX.Y.Z` na `main` e publicar o rascunho |
 
 ---
 
 ## 6. Débitos técnicos conhecidos
 
-- **Nenhuma suíte de testes automatizados.** Não há `pytest` no backend nem testes de
-  componente/e2e no frontend. Toda a validação registrada neste documento veio de execução
-  manual ao vivo (navegador real, chamadas diretas aos provedores de busca). Isso é aceitável
-  para o estágio atual, mas significa que **qualquer regressão só será pega manualmente** —
-  relevante sobretudo para `scraper.py` (dedupe/ranking) e para o cálculo de recorrência de
-  sessões, que têm lógica não trivial o suficiente para valer um teste unitário.
+- **Sem testes automatizados no frontend.** *(O backend ganhou suíte pytest em 2026-09-25 —
+  ver §3 e roadmap item 4.)* No frontend, regressão em sessão/WebSocket/busca só é pega
+  manualmente no navegador.
+- **O sanitizador de Markdown ainda remove tags HTML dentro de blocos de código** (ex.: um
+  exemplo `<div>` num bloco ```` ```html ````). É o custo da defesa em profundidade: saber o
+  que é código exigiria interpretar o Markdown como o renderizador, e um desencontro deixaria
+  HTML cru passar. Registrado em 2026-09-25; texto comum (`<`, `>`, `&`, citações) não é mais
+  afetado.
+- **A busca automática ao abrir "Conteúdo de apoio" usa o título da sessão quando não há
+  tópico** — títulos genéricos ("Teste", "Revisão") trazem resultados fora do tema (visto
+  em 2026-09-25: "Teste QA…" trouxe sites de teste de velocidade). Comportamento de produto,
+  não defeito; um tópico preenchido resolve.
 - **O motor de busca depende inerentemente de scraping de buscadores públicos.** Mesmo com o
   disjuntor de circuito e os cabeçalhos mais realistas (§3), DuckDuckGo/Bing podem mudar o
   HTML a qualquer momento e quebrar os seletores CSS (`div.result`, `li.b_algo` etc.) sem
@@ -350,19 +422,16 @@ raio fixo, para que futuras mudanças de identidade visual continuem sendo de ba
   parser/decodificador quebrou"**. Uma checagem barata de sanidade (o corpo é HTML legível? o
   seletor principal existe na página?) transformaria a próxima quebra silenciosa em log
   explícito, em vez de num usuário recebendo 2 links sem saber por quê.
-- **Nenhuma proteção contra regressão no que já foi corrigido.** Os defeitos de `scraper.py`
-  já custaram duas rodadas de diagnóstico. Os testes que os pegaram (bateria de 2026-09-12)
-  rodaram em scripts descartáveis, fora do repositório — ou seja, **não existem mais**. Vale
-  transformar pelo menos os casos de regressão (desembrulho de redirecionador, corpo
-  decodificado legível, ranking/dedupe, cálculo de `remind_at`, escopos de recorrência) em
-  `pytest` de verdade dentro de `backend/tests/` — é a forma mais barata de o item 4 do
-  roadmap começar a existir.
+- ~~Nenhuma proteção contra regressão no que já foi corrigido~~ — **resolvido no backend em
+  2026-09-25**: os casos de regressão (desembrulho de redirecionador, ranking/dedupe,
+  `normalize_url`, `tokenize`, `remind_at`, escopos de recorrência, IDOR, JWT, `.ics`) viraram
+  `pytest` em `backend/tests/`.
 - **Limitações do app desktop (2026-09-13), registradas ao empacotar — nenhuma corrigida:**
   - **Lembrete só com o app aberto.** Fechar a janela encerra o servidor e o agendador; não há
     ícone na bandeja nem início com o Windows. A janela de tolerância (120 min) cobre reabrir
     logo depois, mas não um dia inteiro fechado.
-  - **Sem ícone próprio** (usa o padrão do PyInstaller/Python) — de propósito: logo e imagens
-    são o item 2 do roadmap, adiado pelo autor.
+  - ~~Sem ícone próprio~~ — **resolvido em 2026-09-25**: `desktop/StudySync.ico` embutido
+    no `.exe` (janela e barra de tarefas herdam) e no instalador.
   - **Sem assinatura de código.** São dois avisos, e ambos se repetem a **cada versão nova**
     (hash novo = reputação zero): o **navegador bloqueia o download** como "potencialmente
     perigoso" (relatado pelo autor em 2026-09-13 ao baixar o artefato da execução #2, após o
@@ -374,14 +443,15 @@ raio fixo, para que futuras mudanças de identidade visual continuem sendo de ba
     (Azure Artifact Signing, certificados OV); nenhuma pula a fase de reputação. O instalador já existe (Inno Setup, 2026-09-13). O
     `.exe` também exige o WebView2 Runtime (nativo no Windows 11 e na maioria dos 10) — o
     instalador não verifica nem instala o runtime.
-  - **Workflow de release:** a execução manual passou (§3); o caminho por tag, que cria o
-    Release em rascunho com `gh release create`, ainda não rodou. Não crie o Release pela
-    interface do GitHub antes da tag — o passo do workflow falharia com "release already exists".
+  - **Workflow de release:** manual e por tag validados (v1.0.0, v1.1.0). Não crie o Release
+    pela interface do GitHub antes da tag — o passo do workflow falharia com "release already
+    exists". `desktop/release-notes.md` tem uma seção "Novidades" por versão: atualize a cada tag.
   - **O aviso do Windows mostra `127.0.0.1:8765` como origem**, com o cabeçalho do host do
     WebView2, e não "StudySync" com ícone próprio. Estético; resolver exige tratar
-    `NotificationReceived` e emitir o toast pelo próprio app (com AppUserModelID), e o ícone
-    depende do item 2 do roadmap. O `icon: '/vite.svg'` usado em `NotificationContext.jsx`
-    aponta para um arquivo que não existe no build (sem efeito visível).
+    `NotificationReceived` e emitir o toast pelo próprio app (com AppUserModelID). O ícone
+    já existe desde 2026-09-25 (`/icon-192.png`, que substituiu o `/vite.svg` inexistente em
+    `NotificationContext.jsx`), mas **não foi verificado** se o toast do Windows via WebView2
+    passa a exibi-lo — conferir na próxima execução manual com um lembrete real.
   - **Fontes vêm do Google Fonts** (`index.html`). Sem internet, títulos caem para Georgia e o
     texto para Segoe UI — a identidade "Caderno" fica parcial offline. Empacotar Fraunces/Inter
     em `frontend/public` resolveria (a busca de conteúdo continua exigindo internet de todo modo).
@@ -422,6 +492,11 @@ raio fixo, para que futuras mudanças de identidade visual continuem sendo de ba
 | 2026-09-13 | **App desktop sem login ("modo local"), mantendo a autenticação por baixo.** No `.exe` não há tela de login, cadastro, "Sair" nem troca de senha: o launcher cria (uma vez) um usuário local e entrega um par de tokens à janela por uma ponte do `pywebview` (`window.pywebview.api`), que só o código rodando dentro da janela enxerga. A API continua exigindo JWT exatamente como antes, e o modo web/dev (`npm run dev`) continua com login. O build do frontend para o desktop é marcado em tempo de build (`VITE_DESKTOP=true`, via `desktop\build.ps1`) | Pedido do autor: app local, de um usuário só, cuja única conexão externa é a busca — login ali é fricção sem ganho. **Por que não remover a autenticação de vez:** (1) o servidor escuta em `127.0.0.1:8765`, e sem token *qualquer site aberto no navegador da máquina* ou outro programa local poderia chamar a API (CSRF/DNS rebinding contra localhost) e ler ou apagar os dados; com o JWT exigido e o token entregue só dentro da janela, isso não é possível; (2) `owner_id` está em todo o modelo e as validações de isolamento/JWT/refresh (§3) continuam valendo para o modo web — remover seria reescrever e perder trabalho validado. Efeitos colaterais positivos: a sessão "expirada após 7 dias" e o "novo login ao cair em outra porta" (§6) deixam de existir, porque a janela pede um token novo à ponte quando precisa |
 | 2026-09-13 | **Distribuição pelo GitHub Releases, gerada pelo GitHub Actions** a cada tag `v*`: zip portátil + instalador Inno Setup (instalação por usuário, sem admin) + `SHA256SUMS.txt`. Todo o processo fica num script local (`desktop\release.ps1`) que o workflow só chama, e o workflow falha se a tag não bater com a versão em `config.py` e `package.json`. Sem assinatura de código por ora | Binário fora do repositório, build reproduzível a partir do código público, e o mesmo script roda na máquina do autor e na CI (dá para validar localmente o que a CI vai fazer). Inno Setup é o instalador mais comum com PyInstaller; instalação por usuário (`%LOCALAPPDATA%\Programs`) dispensa UAC e mantém os dados em `%LOCALAPPDATA%\StudySync` intactos ao desinstalar/atualizar. Assinatura adiada: gratuita só via SignPath (aprovação) ou paga; o README explica o aviso do SmartScreen |
 | 2026-09-13 | **Empacotamento desktop pela rota (a) do roadmap: PyInstaller + `pywebview`.** O mesmo processo roda o backend (uvicorn numa thread, só em `127.0.0.1`) e serve o build do frontend pela mesma origem (`FRONTEND_DIST`, sem mudar uma linha do frontend — as chamadas já eram relativas a `/api`). Detalhes: PyInstaller em **modo pasta**, não arquivo único; dados em `%LOCALAPPDATA%\StudySync`, fora da pasta do app; `ENV=production` com `SECRET_KEY` gerada uma vez e guardada em `secret.key`; **porta fixa 8765** com fallback; trava de instância única por mutex; o esquema continua sendo migrado no boot pelo `init_database()` | Rota (a) era a recomendada no roadmap e a (b) exige toolchain Rust, ausente na máquina. Modo pasta: o arquivo único se extrai para `%TEMP%` a cada abertura (boot mais lento e mais falso-positivo de antivírus). Dados fora da pasta do app: trocar a pasta por uma versão nova não apaga nada, e a decisão de 2026-09-12 (boot aplica migrations) atualiza o banco no lugar. Chave persistente: a chave efêmera derrubaria a sessão salva a cada abertura. Porta fixa: o `localStorage` do WebView2 é por origem, e uma porta aleatória deslogaria o usuário sempre. Instância única: duas cópias rodariam dois agendadores sobre o mesmo banco |
+| 2026-09-25 | **Suíte pytest versionada no backend** (`backend/tests/`, `requirements-dev.txt`), com banco descartável criado pelas próprias migrations do boot e testes ao vivo do motor de busca atrás de `STUDYSYNC_LIVE=1` | As baterias de 2026-09-12 rodaram em scripts descartáveis e sumiram; os mesmos defeitos poderiam voltar sem ninguém ver. Ao vivo fica opcional porque depende da internet e dos buscadores aceitarem o tráfego (o DuckDuckGo passou a responder 202 no meio da bateria) — a suíte padrão tem que ser determinística |
+| 2026-09-25 | **Sanitização preserva o texto do usuário**: só tags saem; `&`, `<`, `>` e a sintaxe Markdown ficam como digitados. O backend continua removendo HTML perigoso (defesa em profundidade mantida) | O `bleach` escapava o texto, corrompendo títulos, tags, Markdown e até a consulta enviada ao buscador. Alternativa descartada: tirar a sanitização do conteúdo e confiar só no `react-markdown` — mais simples, mas removeria uma camada de segurança documentada e validada (§3) |
+| 2026-09-25 | **Recorrência semanal no relógio do usuário** (`User.zone`): cada instância cai no mesmo horário local, inclusive na troca de horário de verão; a duração segue absoluta | "Mesmo horário" é o que o usuário vê na agenda. Somar 7 dias em UTC deslocava 1 h em fusos com horário de verão (o Brasil não tem desde 2019, mas o app aceita qualquer fuso IANA) |
+| 2026-09-25 | **Só recusa explícita (401/403 do refresh) encerra a sessão no frontend**; rede fora ou 5xx é indisponibilidade — mantém tokens e tenta de novo. WebSocket renova o token antes de conectar, pela mesma promessa de renovação do axios | Deslogar em qualquer falha jogava o usuário no login a cada reinício do servidor; renovar em paralelo reapresentaria o refresh já rotacionado e o backend derrubaria todas as sessões (detecção de reuso, §3) |
+| 2026-09-25 | **Logo: monograma "S"** — bojo de cima curvo (ciclo de foco), de baixo reto (célula da agenda), traço de 4 numa grade de 32, em papel `#fffdf8` sobre bloco verde-tinta `#3a6334` (`--color-brand-600`; novo token `--color-paper`). Escolhido pelo autor entre 3 conceitos apresentados com preview: **(1) Ponteiro no canto** — ¾ de círculo que termina num canto reto de célula, com o ponteiro do timer apontando para o canto (recomendado por fundir ciclo e grade num traço só; variações descartadas: com lacuna no topo lia como "U/J", com pivô central lembrava folha, com ponteiro às 12h lembrava botão de liga/desliga, arco aberto lembrava o ícone genérico de "atualizar"); **(2) Grade de foco** — anel de 8 células de grade com 6 preenchidas (embola a 16 px); **(3) Monograma S** — escolhido. Refinamento: terminais em x=24 e x=8 (os únicos que deixam toda borda reta em pixel inteiro a 16 px e mantêm as aberturas do S; 25/7 borra e 26/6 lê como "5"). **Geometria única em `brand/build.py`**, que gera SVG, PNG e ICO com biblioteca padrão, sem Pillow/cairo/Node | Pedido do autor com o briefing: linguagem de caderno, monocromia, legível a 16–32 px, sem gradiente/sombra, sem calendário com números nem clichês do gênero. Gerador próprio em vez de dependência nova: a forma é só retângulos e dois arcos, e assim o ícone do `.exe` é reprodutível a partir do repositório em qualquer máquina com o venv. `.ico` com BMP nos tamanhos ≤ 64 (qualquer leitor entende, incluindo o Inno Setup) e PNG em 128/256 (tamanho do arquivo). O capelo (`GraduationCap`) deixa de ser o logo e fica só como ícone de "Matérias" no menu, onde já estava — antes o mesmo desenho aparecia duas vezes na sidebar |
 | 2026-09-13 | Resolução completa dos 10 defeitos abertos (N1 a N11) | Filtro rigoroso de anúncios no DuckDuckGo (classes `.result--ad`, URLs `y.js`); `sessions_overdue` corrigido para `end_at < now`; dia do painel e agregação de 7 dias calculados no fuso horário do usuário via `ZoneInfo`; validação em schemas Pydantic contra `null` em colunas obrigatórias com 422; registro de função `unaccent` personalizada na conexão SQLite + escape de curingas LIKE para busca e ordenação acidentalmente insensíveis a acentos; validação de timezone IANA; teto de 24h no PATCH de agendamento; `normalize_url` no salvamento de links; unicidade case-insensitive em matérias; suporte a separação por vírgula no `TagInput`, limpeza de pipes em resumos Markdown e concordância plural no sino |
 
 ---
@@ -431,6 +506,42 @@ raio fixo, para que futuras mudanças de identidade visual continuem sendo de ba
 > Toda entrada de trabalho relevante entra aqui, mais recente no topo. Formato: `data — o que
 > mudou — arquivo(s) — por quê`.
 
+- **2026-09-25 (2)** — **Bateria de testes com suíte versionada: 15 bugs encontrados e
+  corrigidos** (tabela em §3, decisões em §7). Arquivos — backend: `app/core/sanitize.py`
+  (#1), `app/services/ics.py` (#2), `app/services/scheduler.py` (#3),
+  `app/api/routes/schedules.py` (#4, #5), `app/models/user.py` (`User.zone`),
+  `app/schemas/search.py` (#6), `app/schemas/user.py` (#7), `app/services/scraper.py` (#8),
+  `app/services/excerpt.py` novo + `routes/notes.py`/`routes/dashboard.py` (#13, remove a
+  cópia duplicada), `routes/dashboard.py` (usa `User.zone`), `main.py`/`schedules.py`/
+  `search.py` (constante 422), `tests/` e `requirements-dev.txt` novos. Frontend:
+  `lib/format.js` + `ScheduleCard.jsx`/`ScheduleModal.jsx` (#9, #14), `lib/api.js` +
+  `NotificationContext.jsx` (#10), `AuthContext.jsx` + `RouteGuards.jsx` (#11),
+  `DashboardPage.jsx` (#12), `ContentSearchPanel.jsx` (#15). Docs: README (comandos de
+  teste, árvore), `VALIDATION_PROTOCOL.md` §3.2. Validação: 151 testes + 4 ao vivo; navegador
+  real claro/escuro, 7 páginas sem erro de console; `.exe` rebuildado e inspecionado pela
+  depuração remota do WebView2 (texto preservado, lembrete rearmado, `.ics`, WebSocket
+  conectado, lembrete real chegando ao sino). Dados de teste removidos da conta demo (notas e
+  links de volta a 5 e 4); `.exe` testado com `LOCALAPPDATA` descartável.
+- **2026-09-25 (3)** — **Release v1.1.0** (logo + as 15 correções). Versão em `config.py`,
+  `package.json`, `package-lock.json`; seção "Novidades da 1.1.0" em `desktop/release-notes.md`.
+  `release.ps1 -Version 1.1.0` local OK antes do push (instalador 25,0 MB, zip 28,9 MB).
+  Corrigido neste documento: a v1.0.0 já estava publicada desde 2026-09-14 (o roadmap dizia
+  "falta a tag").
+- **2026-09-25** — **Logo do StudySync (roadmap item 2, parte do logo).** Três conceitos
+  apresentados, o autor escolheu o Monograma S; decisão e alternativas em §7, validação em
+  §3 ("Logo e ícone do app"). Arquivos novos: `brand/build.py`, `brand/README.md`,
+  `brand/studysync-{icon,mark}.svg`, `frontend/public/favicon.{svg,ico}`,
+  `frontend/public/icon-192.png`, `desktop/StudySync.ico`,
+  `frontend/src/components/ui/Brand.jsx`. Alterados: `frontend/src/index.css`
+  (`--color-paper`), `Sidebar.jsx`, `AuthShell.jsx`, `RouteGuards.jsx` (capelo com sombra →
+  `BrandIcon`), `index.html` (favicon emoji 📚 → `/favicon.svg` + `/favicon.ico`),
+  `NotificationContext.jsx` e `FocusTimer.jsx` (ícone das notificações),
+  `desktop/StudySync.spec` (`icon=`), `desktop/installer.iss` (`SetupIconFile`), `README.md`
+  (logo no topo, `brand/` na árvore). Testes do `.exe`
+  com `LOCALAPPDATA` descartável; `desktop\release\` regerado pelo `release.ps1` (artefatos
+  locais, ignorados pelo git); portas 8000, 5173 e 8765 conferidas livres com HTTP real.
+  **Não verificado:** se o toast do Windows (via WebView2) passa a mostrar o `icon-192.png`
+  (§6).
 - **2026-09-13 (5)** — **Instruções de download para executável sem assinatura.** O autor
   relatou o navegador bloqueando o download do artefato da execução #2 (commit `c5b0a6e`,
   Success). Verificado que é reputação, não detecção (Defender limpo, ver §6). Arquivos:

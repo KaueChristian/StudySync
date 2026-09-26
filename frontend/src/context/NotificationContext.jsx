@@ -20,7 +20,7 @@ import {
   useState,
 } from 'react'
 
-import { tokenStore } from '@/lib/api'
+import { getFreshAccessToken } from '@/lib/api'
 import { notificationService } from '@/lib/services'
 import { useAuth } from './AuthContext'
 import { useToast } from './ToastContext'
@@ -90,7 +90,7 @@ export function NotificationProvider({ children }) {
       const native = new Notification(notification.title, {
         body: notification.message ?? '',
         tag: `studysync-${notification.id}`,
-        icon: '/vite.svg',
+        icon: '/icon-192.png',
       })
       native.onclick = () => {
         window.focus()
@@ -131,11 +131,18 @@ export function NotificationProvider({ children }) {
       reconnectRef.current = null
     }
 
-    const connect = () => {
+    const connect = async () => {
       if (disposed) return
 
-      const token = tokenStore.access
-      if (!token) return
+      // O token só vale na abertura do socket: renova antes se já venceu.
+      let token
+      try {
+        token = await getFreshAccessToken()
+      } catch {
+        scheduleReconnect()
+        return
+      }
+      if (disposed || !token) return
 
       let socket
       try {

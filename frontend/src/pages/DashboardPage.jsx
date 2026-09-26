@@ -1,5 +1,5 @@
 /** Painel inicial: métricas, próximas sessões, anotações recentes e distribuição. */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   ArrowRight,
@@ -8,8 +8,10 @@ import {
   CalendarPlus,
   CheckCircle2,
   Clock,
+  CloudOff,
   GraduationCap,
   Plus,
+  RotateCcw,
   Sparkles,
   StickyNote,
   TrendingUp,
@@ -104,16 +106,30 @@ export default function DashboardPage() {
 
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+
+  const hasData = useRef(false)
 
   const load = useCallback(async () => {
     try {
       setData(await dashboardService.get())
+      hasData.current = true
+      setLoadError('')
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Não foi possível carregar o painel.'))
+      const message = getErrorMessage(err, 'Não foi possível carregar o painel.')
+      // Sem dados ainda, o erro vira a própria tela (com como sair dela);
+      // numa recarga, os dados antigos ficam e o erro vai para o toast.
+      setLoadError(message)
+      if (hasData.current) toast.error(message)
     } finally {
       setLoading(false)
     }
   }, [toast])
+
+  const retry = () => {
+    setLoading(true)
+    load()
+  }
 
   useEffect(() => {
     load()
@@ -151,7 +167,20 @@ export default function DashboardPage() {
     )
   }
 
-  if (!data) return null
+  if (!data) {
+    return (
+      <EmptyState
+        icon={CloudOff}
+        title="Não foi possível carregar o painel"
+        description={loadError}
+        action={
+          <Button icon={RotateCcw} onClick={retry}>
+            Tentar de novo
+          </Button>
+        }
+      />
+    )
+  }
 
   const { stats, upcoming, recent_notes: recentNotes, distribution, weekly_activity: weekly } = data
   const isEmpty = stats.subjects === 0 && stats.notes === 0 && stats.sessions_upcoming === 0

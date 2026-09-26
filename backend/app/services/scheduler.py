@@ -20,6 +20,7 @@ desde que esteja dentro da janela de tolerância (`REMINDER_GRACE_MINUTES`).
 from __future__ import annotations
 
 import logging
+import math
 from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -114,7 +115,11 @@ def scan_reminders() -> None:
             for schedule in due:
                 start_at = ensure_utc(schedule.start_at)
                 assert start_at is not None
-                minutes_left = max(0, int((start_at - now).total_seconds() // 60))
+                # Arredonda (não trunca): a varredura roda até 30 s depois do
+                # horário, e 14min50s precisa virar "em 15 minutos" — o que o
+                # usuário configurou.
+                seconds_left = (start_at - now).total_seconds()
+                minutes_left = max(0, math.floor(seconds_left / 60 + 0.5))
 
                 notification = Notification(
                     user_id=schedule.owner_id,

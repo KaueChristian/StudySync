@@ -131,7 +131,7 @@ async def validation_exception_handler(
 
     first = errors[0]["message"] if errors else "Dados inválidos."
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content=jsonable_encoder({"detail": first, "errors": errors}),
     )
 
